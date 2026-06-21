@@ -2,6 +2,7 @@ import Header from "./components/Header.jsx";
 import Hero from "./components/Hero.jsx";
 import About from "./components/About.jsx";
 import HowItWorks from "./components/HowItWorks.jsx";
+import AppShowcase from "./components/AppShowcase.jsx";
 import Footer from "./components/Footer.jsx";
 
 export default function App() {
@@ -17,7 +18,10 @@ export default function App() {
       <main>
         <Hero />
         <About />
+        <AppShowcase mockup="conversation" />
         <HowItWorks />
+        <AppShowcase mockup="camera" reverse />
+        <AppShowcase mockup="voice" />
       </main>
       <Footer />
     </>
