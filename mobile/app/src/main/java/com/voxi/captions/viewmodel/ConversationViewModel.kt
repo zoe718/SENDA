@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.voxi.captions.audio.AudioCapture
 import com.voxi.captions.audio.ProsodyAnalyzer
 import com.voxi.captions.audio.VoskEngine
+import com.voxi.captions.model.Speaker
 import com.voxi.captions.model.Tone
 import com.voxi.captions.model.Utterance
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,8 @@ data class ConversationUiState(
     val isListening: Boolean = false,
     val partialText: String = "",
     val partialTone: Tone = Tone.Neutral,
+    val partialSpeaker: Speaker = Speaker.ONE,
+    val manualSpeaker: Speaker? = null,
     val utterances: List<Utterance> = emptyList(),
     val statusMessage: String? = null,
 )
@@ -33,6 +36,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val vosk = VoskEngine()
     private val audio = AudioCapture()
     private val prosody = ProsodyAnalyzer()
+    private val speakers = SpeakerTracker()
 
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
@@ -74,7 +78,13 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                     when (val r = vosk.accept(buffer, buffer.size)) {
                         is VoskEngine.Recognition.Partial -> {
                             lastProgressMs = System.currentTimeMillis()
-                            _uiState.update { it.copy(partialText = r.text, partialTone = prosody.current()) }
+                            _uiState.update {
+                                it.copy(
+                                    partialText = r.text,
+                                    partialTone = prosody.current(),
+                                    partialSpeaker = speakers.currentSpeaker,
+                                )
+                            }
                         }
                         is VoskEngine.Recognition.Final -> {
                             lastProgressMs = System.currentTimeMillis()
@@ -99,11 +109,22 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.update { it.copy(isListening = false, partialText = "") }
     }
 
+    /** Modo A (spec §6): el usuario fija un carril, o null para diarización automática. */
+    fun setSpeaker(speaker: Speaker?) {
+        speakers.setManual(speaker)
+        _uiState.update {
+            it.copy(manualSpeaker = speaker, partialSpeaker = speakers.currentSpeaker)
+        }
+    }
+
     private fun addUtterance(text: String, tone: Tone) {
+        val speaker = speakers.classify(tone.pitch)
         _uiState.update { state ->
             state.copy(
-                utterances = state.utterances + Utterance(id = nextId++, text = text, tone = tone),
+                utterances = state.utterances +
+                    Utterance(id = nextId++, text = text, tone = tone, speaker = speaker),
                 partialText = "",
+                partialSpeaker = speakers.currentSpeaker,
             )
         }
     }
@@ -116,6 +137,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     vosk.reset()
                     prosody.reset()
+                    speakers.reset()
                 }
                 lastProgressMs = System.currentTimeMillis()
                 _uiState.update { it.copy(statusMessage = "Reanudando…") }

@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,17 +34,20 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.voxi.captions.model.Speaker
 import com.voxi.captions.model.Utterance
 import com.voxi.captions.ui.components.SpeechBubble
 import com.voxi.captions.ui.theme.VoxiBg
 import com.voxi.captions.ui.theme.VoxiSlate
 import com.voxi.captions.ui.theme.VoxiTeal
+import com.voxi.captions.ui.theme.speakerColor
 import com.voxi.captions.viewmodel.ConversationUiState
 
 @Composable
 fun ConversationScreen(
     state: ConversationUiState,
     modifier: Modifier = Modifier,
+    onSelectSpeaker: (Speaker?) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -51,6 +56,13 @@ fun ConversationScreen(
             .padding(16.dp),
     ) {
         Header(isListening = state.isListening)
+
+        Spacer(Modifier.size(12.dp))
+
+        SpeakerSelector(
+            manualSpeaker = state.manualSpeaker,
+            onSelect = onSelectSpeaker,
+        )
 
         Spacer(Modifier.size(12.dp))
 
@@ -84,6 +96,33 @@ private fun Header(isListening: Boolean) {
         )
         Spacer(Modifier.weight(1f))
         if (isListening) ListeningIndicator()
+    }
+}
+
+/** Selector de carril (spec §6, Modo A): Auto = diarización por pitch. */
+@Composable
+private fun SpeakerSelector(
+    manualSpeaker: Speaker?,
+    onSelect: (Speaker?) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = manualSpeaker == null,
+            onClick = { onSelect(null) },
+            label = { Text("Auto") },
+        )
+        Speaker.entries.forEach { speaker ->
+            val color = speakerColor(speaker)
+            FilterChip(
+                selected = manualSpeaker == speaker,
+                onClick = { onSelect(speaker) },
+                label = { Text(speaker.displayName) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = color.copy(alpha = 0.25f),
+                    selectedLabelColor = color,
+                ),
+            )
+        }
     }
 }
 
@@ -131,22 +170,42 @@ private fun Conversation(state: ConversationUiState) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(state.utterances, key = Utterance::id) { utterance ->
-            SpeechBubble(
-                text = utterance.text,
-                tone = utterance.tone,
-                modifier = Modifier.animateItem(),
-            )
-        }
-        if (state.partialText.isNotEmpty()) {
-            item(key = "partial") {
+            SpeakerRow(speaker = utterance.speaker, modifier = Modifier.animateItem()) {
                 SpeechBubble(
-                    text = state.partialText,
-                    tone = state.partialTone,
-                    isPartial = true,
-                    modifier = Modifier.animateItem(),
+                    text = utterance.text,
+                    tone = utterance.tone,
+                    speakerName = utterance.speaker.displayName,
+                    speakerColor = speakerColor(utterance.speaker),
                 )
             }
         }
+        if (state.partialText.isNotEmpty()) {
+            item(key = "partial") {
+                SpeakerRow(speaker = state.partialSpeaker, modifier = Modifier.animateItem()) {
+                    SpeechBubble(
+                        text = state.partialText,
+                        tone = state.partialTone,
+                        isPartial = true,
+                        speakerName = state.partialSpeaker.displayName,
+                        speakerColor = speakerColor(state.partialSpeaker),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Coloca la burbuja en el carril del hablante: Hablante 1 a la izquierda, 2 a la derecha. */
+@Composable
+private fun SpeakerRow(
+    speaker: Speaker,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Row(modifier = modifier.fillMaxWidth()) {
+        if (speaker == Speaker.TWO) Spacer(Modifier.weight(1f))
+        Box(modifier = Modifier.weight(4f, fill = false)) { content() }
+        if (speaker == Speaker.ONE) Spacer(Modifier.weight(1f))
     }
 }
 

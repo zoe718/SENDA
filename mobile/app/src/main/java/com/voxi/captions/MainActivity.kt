@@ -73,6 +73,7 @@ private fun VoxiApp() {
         ConversationScreen(
             state = state,
             modifier = Modifier.fillMaxSize(),
+            onSelectSpeaker = viewModel::setSpeaker,
         )
     } else {
         PermissionRequest(
