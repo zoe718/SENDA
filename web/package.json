@@ -1,0 +1,22 @@
+{
+  "name": "senda",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SENDA — Haz visible la conversación. Landing page (Vite + React + Tailwind).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.1.3",
+    "vite": "^6.2.5"
+  }
+}

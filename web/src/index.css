@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* =========================================================
+   SENDA — design tokens (Tailwind v4 @theme)
+   Genera utilidades: bg-navy, text-aura, font-title, etc.
+   ========================================================= */
+@theme {
+  --color-aura: #42e8b4; /* verde aura */
+  --color-voice: #57b7ff; /* azul voz */
+  --color-navy: #0b1736; /* azul profundo */
+  --color-snow: #f8fcff; /* blanco nieve */
+  --color-mint: #effffa; /* menta suave */
+  --color-slate-soft: #64748b; /* gris texto */
+  --color-coral: #ff6b6b; /* coral alerta */
+
+  --font-title: "Sora", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+/* ---------- Base ---------- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-navy);
+  background: var(--color-snow);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Gradiente de marca reutilizable */
+.brand-gradient {
+  background: linear-gradient(135deg, #42e8b4 0%, #57b7ff 100%);
+}
+.brand-gradient-text {
+  background: linear-gradient(135deg, #42e8b4 0%, #57b7ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Foco accesible */
+:focus-visible {
+  outline: 3px solid var(--color-voice);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ---------- Animaciones ---------- */
+@keyframes heroIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes cueBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+@keyframes revealUp {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-hero-in {
+  animation: heroIn 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-cue {
+  animation: cueBob 1.8s ease-in-out infinite;
+}
+
+/* Reveal al hacer scroll (se activa con .is-visible vía JS) */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- Accesibilidad: reducir movimiento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

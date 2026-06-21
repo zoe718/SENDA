@@ -1,109 +1,25 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Voxi — Haz visible la conversación</title>
-  <meta
-    name="description"
-    content="Voxi hace visible la conversación: identifica quién habla, dónde está y qué dice en tiempo real, desde el celular."
-  />
-  <meta name="theme-color" content="#0B1736" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SENDA — Haz visible la conversación</title>
+    <meta
+      name="description"
+      content="SENDA hace visible la conversación: identifica quién habla, dónde está y qué dice en tiempo real, desde el celular. Accesibilidad para personas sordas y con discapacidad auditiva."
+    />
+    <meta name="theme-color" content="#0B1736" />
 
-  <!-- Fuentes: Sora (títulos) + Inter (texto) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700;800&display=swap"
-    rel="stylesheet"
-  />
-
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <a class="skip-link" href="#como-funciona">Saltar al contenido</a>
-
-  <!-- ===================== HEADER (minimalista) ===================== -->
-  <header class="header" id="top">
-    <div class="container header-inner">
-      <a class="brand" href="#top" aria-label="Voxi — inicio">
-        <span class="brand-mark" aria-hidden="true"><span class="brand-dot"></span></span>
-        <span class="brand-name">Voxi</span>
-      </a>
-      <a class="btn btn-primary" href="#como-funciona">Comunícate</a>
-    </div>
-  </header>
-
-  <main>
-    <!-- ===================== HERO (video de fondo) ===================== -->
-    <section class="hero" aria-labelledby="hero-title">
-      <video
-        class="hero-video"
-        autoplay
-        muted
-        loop
-        playsinline
-        preload="auto"
-        aria-hidden="true"
-      >
-        <source src="resources/gatitos.mp4" type="video/mp4" />
-      </video>
-      <div class="hero-overlay" aria-hidden="true"></div>
-
-      <div class="hero-content">
-        <h1 id="hero-title" class="hero-cta">Haz visible la conversación</h1>
-        <a class="scroll-cue" href="#como-funciona" aria-label="Ir a cómo funciona">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-        </a>
-      </div>
-    </section>
-
-    <!-- ===================== CÓMO FUNCIONA ===================== -->
-    <section class="section" id="como-funciona" aria-labelledby="como-title">
-      <div class="container">
-        <div class="section-head">
-          <span class="kicker">Cómo funciona</span>
-          <h2 id="como-title">Tres pasos para hacerla visible.</h2>
-        </div>
-
-        <ol class="steps">
-          <li class="step reveal">
-            <span class="step-num">1</span>
-            <div class="step-ic" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 7h3l2-2h6l2 2h3v12H4z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-            </div>
-            <h3>Abre la cámara</h3>
-            <p>Inicia Voxi desde tu celular y apunta a la conversación.</p>
-          </li>
-          <li class="step reveal">
-            <span class="step-num">2</span>
-            <div class="step-ic" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 11a7 7 0 0 1-14 0" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-            </div>
-            <h3>Voxi detecta quién habla</h3>
-            <p>Une la voz activa con la persona que mueve los labios.</p>
-          </li>
-          <li class="step reveal">
-            <span class="step-num">3</span>
-            <div class="step-ic" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M4 4h16v12H7l-3 3z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-            </div>
-            <h3>Resalta y subtitula</h3>
-            <p>Ilumina al hablante y muestra el texto en tiempo real.</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-  </main>
-
-  <!-- ===================== FOOTER (mínimo) ===================== -->
-  <footer class="footer">
-    <div class="container footer-inner">
-      <span class="footer-brand">Voxi</span>
-      <span class="footer-credit">Platanus Hack 26 · CDMX · Team 3</span>
-    </div>
-  </footer>
-
-  <script src="script.js"></script>
-</body>
+    <!-- Fuentes: Sora (títulos) + Inter (texto) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
