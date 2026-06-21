@@ -8,14 +8,14 @@ export default function Footer() {
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           {/* Marca + tagline */}
           <div className="max-w-sm">
-            <div className="flex items-center">
-              <img
-                src="/resources/senda-logo.png"
-                alt=""
-                className="h-20 w-20 rounded-2xl object-cover shadow-lg shadow-voice/10 ring-1 ring-white/10"
+            <div className="inline-flex flex-col items-start gap-1">
+              <span className="font-title text-2xl font-extrabold tracking-tight text-snow">
+                SENDA
+              </span>
+              <span
+                className="h-px w-full bg-gradient-to-r from-voice to-aura opacity-70"
                 aria-hidden="true"
               />
-              <span className="sr-only">SENDA</span>
             </div>
             <p className="mt-4 font-title text-lg font-semibold text-snow">
               Haz <span className="highlight-gradient-text">visible</span> la conversación.
