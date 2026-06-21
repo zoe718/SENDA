@@ -9,6 +9,9 @@ import com.voxi.captions.audio.VoskEngine
 import com.voxi.captions.model.Speaker
 import com.voxi.captions.model.Tone
 import com.voxi.captions.model.Utterance
+import com.voxi.captions.tts.AndroidTts
+import com.voxi.captions.vision.ActiveSpeaker
+import com.voxi.captions.vision.DetectedFace
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,6 +32,10 @@ data class ConversationUiState(
     val manualSpeaker: Speaker? = null,
     val utterances: List<Utterance> = emptyList(),
     val statusMessage: String? = null,
+    // Capa 3 Modo B (cámara + caras)
+    val showCamera: Boolean = false,
+    val faces: List<DetectedFace> = emptyList(),
+    val activeFace: DetectedFace? = null,
 )
 
 class ConversationViewModel(app: Application) : AndroidViewModel(app) {
@@ -37,6 +44,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val audio = AudioCapture()
     private val prosody = ProsodyAnalyzer()
     private val speakers = SpeakerTracker()
+    private val activeSpeaker = ActiveSpeaker()
+    private val tts by lazy { AndroidTts(getApplication()) }
 
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
@@ -109,6 +118,31 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         _uiState.update { it.copy(isListening = false, partialText = "") }
     }
 
+    /** Vía de regreso (spec §7): la persona sorda escribe y el teléfono lo dice. */
+    fun speak(text: String) {
+        tts.speak(text)
+    }
+
+    /** Capa 3 Modo B: alterna entre el chat espacial y la vista de cámara. */
+    fun setShowCamera(show: Boolean) {
+        if (!show) activeSpeaker.reset()
+        _uiState.update { it.copy(showCamera = show, faces = emptyList(), activeFace = null) }
+    }
+
+    fun toggleCamera() = setShowCamera(!_uiState.value.showCamera)
+
+    /**
+     * Llega desde ML Kit (executor de CameraX). Decide el hablante activo
+     * fusionando movimiento de labios con energía de audio (spec §6).
+     */
+    fun onFacesDetected(faces: List<DetectedFace>) {
+        val s = _uiState.value
+        val audioActive = s.isListening &&
+            (s.partialText.isNotBlank() || s.partialTone.volume > 0.35f)
+        val active = activeSpeaker.update(faces, audioActive)
+        _uiState.update { it.copy(faces = faces, activeFace = active) }
+    }
+
     /** Modo A (spec §6): el usuario fija un carril, o null para diarización automática. */
     fun setSpeaker(speaker: Speaker?) {
         speakers.setManual(speaker)
@@ -149,5 +183,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
         captureJob?.cancel()
         vosk.close()
+        tts.shutdown()
     }
 }

@@ -27,6 +27,7 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.voxi.captions.ui.screens.CameraScreen
 import com.voxi.captions.ui.screens.ConversationScreen
 import com.voxi.captions.ui.theme.VoxiBg
 import com.voxi.captions.ui.theme.VoxiSlate
@@ -69,15 +70,43 @@ private fun VoxiApp() {
         if (hasMicPermission) viewModel.startListening()
     }
 
-    if (hasMicPermission) {
-        ConversationScreen(
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            context.checkSelfPermission(Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val cameraPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasCameraPermission = granted
+        if (granted) viewModel.setShowCamera(true)
+    }
+
+    val onToggleCamera: () -> Unit = {
+        when {
+            state.showCamera -> viewModel.setShowCamera(false)
+            hasCameraPermission -> viewModel.setShowCamera(true)
+            else -> cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    when {
+        !hasMicPermission -> PermissionRequest(
+            onRequest = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+        )
+        state.showCamera && hasCameraPermission -> CameraScreen(
+            state = state,
+            onFacesDetected = viewModel::onFacesDetected,
+            onToggleCamera = { viewModel.setShowCamera(false) },
+            modifier = Modifier.fillMaxSize(),
+        )
+        else -> ConversationScreen(
             state = state,
             modifier = Modifier.fillMaxSize(),
             onSelectSpeaker = viewModel::setSpeaker,
-        )
-    } else {
-        PermissionRequest(
-            onRequest = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+            onSend = viewModel::speak,
+            onToggleCamera = onToggleCamera,
         )
     }
 }

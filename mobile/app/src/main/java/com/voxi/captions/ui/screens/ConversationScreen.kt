@@ -6,6 +6,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -36,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.voxi.captions.model.Speaker
 import com.voxi.captions.model.Utterance
+import com.voxi.captions.ui.components.ComposeBar
 import com.voxi.captions.ui.components.SpeechBubble
 import com.voxi.captions.ui.theme.VoxiBg
 import com.voxi.captions.ui.theme.VoxiSlate
@@ -48,6 +52,8 @@ fun ConversationScreen(
     state: ConversationUiState,
     modifier: Modifier = Modifier,
     onSelectSpeaker: (Speaker?) -> Unit = {},
+    onSend: (String) -> Unit = {},
+    onToggleCamera: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -55,7 +61,7 @@ fun ConversationScreen(
             .background(VoxiBg)
             .padding(16.dp),
     ) {
-        Header(isListening = state.isListening)
+        Header(isListening = state.isListening, onToggleCamera = onToggleCamera)
 
         Spacer(Modifier.size(12.dp))
 
@@ -83,11 +89,15 @@ fun ConversationScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
+
+        Spacer(Modifier.size(8.dp))
+
+        ComposeBar(onSend = onSend)
     }
 }
 
 @Composable
-private fun Header(isListening: Boolean) {
+private fun Header(isListening: Boolean, onToggleCamera: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = "Voxi",
@@ -96,7 +106,24 @@ private fun Header(isListening: Boolean) {
         )
         Spacer(Modifier.weight(1f))
         if (isListening) ListeningIndicator()
+        Spacer(Modifier.width(12.dp))
+        CameraButton(onClick = onToggleCamera)
     }
+}
+
+/** Acceso a la vista de camara (Modo B). */
+@Composable
+private fun CameraButton(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Text(
+        text = "Camara",
+        style = MaterialTheme.typography.labelLarge,
+        color = VoxiTeal,
+        modifier = Modifier
+            .border(1.dp, VoxiTeal.copy(alpha = 0.6f), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+    )
 }
 
 /** Selector de carril (spec §6, Modo A): Auto = diarización por pitch. */

@@ -21,7 +21,7 @@ class AndroidTts(context: Context) {
     }
 
     private fun configureLanguage() {
-        val result = runCatching { tts.setLanguage(Locale("es", "ES")) }
+        val result = runCatching { tts.setLanguage(Locale.forLanguageTag("es-ES")) }
             .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             runCatching { tts.language = Locale.getDefault() }
