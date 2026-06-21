@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <!-- Voxi (spec §8): fondo oscuro para la ventana antes de que cargue Compose. -->
+    <color name="voxi_bg">#FF0A0E14</color>
+</resources>

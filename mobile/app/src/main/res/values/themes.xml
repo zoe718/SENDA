@@ -1,0 +1,9 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Tema base para una app Compose (sin dependencia de la librería Material XML).
+         Los colores reales los aplica VoxiTheme en Compose (spec §8, tema oscuro). -->
+    <style name="Theme.Voxi" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/voxi_bg</item>
+        <item name="android:statusBarColor">@color/voxi_bg</item>
+        <item name="android:navigationBarColor">@color/voxi_bg</item>
+    </style>
+</resources>
