@@ -76,6 +76,7 @@ fun ConversationScreen(
     onNewConversation: () -> Unit = {},
     onChangeVoice: () -> Unit = {},
     onToggleMute: () -> Unit = {},
+    onRescan: () -> Unit = {},
 ) {
     Box(
         modifier = modifier
@@ -111,6 +112,7 @@ fun ConversationScreen(
                 onToggleCamera = onToggleCamera,
                 onChangeVoice = onChangeVoice,
                 onToggleMute = onToggleMute,
+                onRescan = onRescan,
             )
 
             Spacer(Modifier.size(12.dp))
@@ -176,6 +178,7 @@ private fun ActionsRow(
     onToggleCamera: () -> Unit,
     onChangeVoice: () -> Unit,
     onToggleMute: () -> Unit,
+    onRescan: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -191,6 +194,8 @@ private fun ActionsRow(
             active = isMuted,
         )
         PillButton(label = "Camara", onClick = onToggleCamera)
+        // Capa 2 (spec 6): re-escanear personas y borrar las enroladas.
+        PillButton(label = "Personas", onClick = onRescan)
         PillButton(label = "Voz", onClick = onChangeVoice)
         PillButton(label = "Historial", onClick = onHistory)
         if (canExport) PillButton(label = "Exportar", onClick = onExport)

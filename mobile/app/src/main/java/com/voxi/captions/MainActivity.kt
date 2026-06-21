@@ -173,6 +173,13 @@ private fun VoxiApp() {
             onNewConversation = viewModel::startNewConversation,
             onChangeVoice = viewModel::requestVoiceChange,
             onToggleMute = viewModel::toggleMute,
+            onRescan = {
+                // Re-escaneo de personas (spec 6): abre la pantalla de escaneo
+                // sembrada con las personas ya enroladas, donde se pueden agregar
+                // nuevas o borrar las existentes con la X.
+                if (hasCameraPermission) viewModel.startScan()
+                else scanCameraLauncher.launch(Manifest.permission.CAMERA)
+            },
         )
     }
 }

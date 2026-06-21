@@ -121,10 +121,17 @@ class FaceAnalyzer(
     }
 
     /**
-     * Firma geometrica del rostro a partir de los landmarks de Face Detection,
-     * normalizada por la distancia interocular (invariante a escala/posicion) y
-     * centrada en su media para que el coseno compare la FORMA del rostro (mas
-     * discriminante que ratios crudos, todos positivos). null si faltan puntos.
+     * Firma geometrica del rostro a partir de los landmarks de Face Detection.
+     *
+     * Tomamos cinco puntos ESTABLES (los dos ojos, la base de la nariz y las dos
+     * comisuras de la boca) y construimos el vector de TODAS sus distancias por
+     * pares, normalizadas por la distancia interocular (invariante a escala y a
+     * la distancia a la camara). Se omite la base del labio inferior a proposito
+     * porque se mueve al hablar y ensuciaria la identidad. El resultado son 9
+     * proporciones faciales CRUDAS (positivas): mantenerlas sin centrar conserva
+     * las medidas absolutas del rostro, que es justo lo que distingue a cada
+     * persona. La comparacion se hace por distancia euclidea (ver FaceIdentifier),
+     * no por coseno. null si faltan puntos clave.
      */
     private fun signatureOf(face: Face): FloatArray? = runCatching {
         val le = face.getLandmark(FaceLandmark.LEFT_EYE)?.position ?: return@runCatching null
@@ -132,31 +139,25 @@ class FaceAnalyzer(
         val nose = face.getLandmark(FaceLandmark.NOSE_BASE)?.position ?: return@runCatching null
         val ml = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position ?: return@runCatching null
         val mr = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position ?: return@runCatching null
-        val mb = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
 
         fun d(a: PointF, b: PointF) =
             hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
 
         val ocular = d(le, re)
         if (ocular < 1f) return@runCatching null
-        val eyeMid = PointF((le.x + re.x) / 2f, (le.y + re.y) / 2f)
-        val mouthMid = PointF((ml.x + mr.x) / 2f, (ml.y + mr.y) / 2f)
-        val bottom = mb ?: mouthMid
 
-        val raw = floatArrayOf(
-            d(ml, mr) / ocular,        // ancho de boca relativo
-            d(eyeMid, nose) / ocular,  // ojos -> nariz
-            d(nose, mouthMid) / ocular, // nariz -> boca
-            d(eyeMid, bottom) / ocular, // alto facial (ojos -> menton aprox)
-            d(nose, ml) / ocular,      // nariz -> comisura izq
-            d(nose, mr) / ocular,      // nariz -> comisura der
-            d(nose, bottom) / ocular,  // largo nariz -> labio inferior
-        )
-        if (raw.any { it.isNaN() || it.isInfinite() }) return@runCatching null
-
-        // Centra en la media -> el coseno mide forma (correlacion), no magnitud.
-        val mean = raw.average().toFloat()
-        FloatArray(raw.size) { raw[it] - mean }
+        // Distancias por pares entre los 5 puntos estables, salvo ojo-ojo (=1).
+        val pts = arrayOf(le, re, nose, ml, mr)
+        val raw = ArrayList<Float>(9)
+        for (i in pts.indices) {
+            for (j in i + 1 until pts.size) {
+                if (i == 0 && j == 1) continue // interocular (siempre 1, redundante)
+                raw.add(d(pts[i], pts[j]) / ocular)
+            }
+        }
+        val arr = raw.toFloatArray()
+        if (arr.any { it.isNaN() || it.isInfinite() }) return@runCatching null
+        arr
     }.getOrNull()
 
     /** Gira el bitmap del sensor a posicion vertical para que coincida con las coords. */

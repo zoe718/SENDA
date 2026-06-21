@@ -29,8 +29,8 @@ import com.voxi.captions.tts.AndroidTts
 import com.voxi.captions.tts.ElevenLabsTts
 import com.voxi.captions.vision.ActiveSpeaker
 import com.voxi.captions.vision.DetectedFace
+import com.voxi.captions.vision.FaceIdentifier
 import com.voxi.captions.vision.FaceMemory
-import com.voxi.captions.vision.FaceTracker
 import com.voxi.captions.vision.FaceVoiceBinder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -127,13 +127,14 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val embedder = SpeakerEmbedder(app)
     private val speakers = SpeakerTracker(SpeakerStore(app))
     private val activeSpeaker = ActiveSpeaker()
-    // Reconocimiento facial (spec 6): da ids estables a las caras y aprende que
-    // rostro corresponde a que voz, para colorear contornos y guiar la diarizacion.
-    private val faceTracker = FaceTracker()
     private val faceVoiceBinder = FaceVoiceBinder()
     // Capa 2 (spec §6): memoria de rostros persistente + matcher en runtime.
     private val personStore = PersonStore(app)
     private val faceMemory = FaceMemory()
+    // Reconocimiento facial (spec §6): da a cada rostro una identidad ESTABLE que
+    // sobrevive a los reinicios del trackId nativo de ML Kit y reconoce a las
+    // personas enroladas. Su id estable es la llave cara-voz de todo el pipeline.
+    private val faceIdentifier = FaceIdentifier(faceMemory)
     private val tts by lazy { AndroidTts(getApplication()) }
     // Voz humana de ElevenLabs (spec §7): si hay clave e internet sintetiza una
     // voz expresiva; si no, cae al TTS nativo de Android.
@@ -374,7 +375,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         prosody.reset()
         resetPcm()
         // Las asociaciones cara-voz son por sesion: una conversacion nueva las olvida.
-        faceTracker.reset()
+        faceIdentifier.reset()
         faceVoiceBinder.reset()
         replyJob?.cancel()
         // Las fotos cara↔voz tambien son por sesion: una conversacion nueva las olvida.
@@ -446,10 +447,11 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onFacesDetected(faces: List<DetectedFace>) {
         val s = _uiState.value
-        // Face Detection ya trae ids de tracking nativos y estables, asi que no
-        // necesitamos el emparejamiento manual de FaceTracker. Solo pintamos cada
-        // cara con el color de su hablante (si ya se asocio una voz con ese rostro).
-        val tracked = faces.map { f ->
+        // Damos a cada rostro una identidad ESTABLE y persistente (sobrevive a los
+        // reinicios del trackId nativo de ML Kit y reconoce a los enrolados); ese
+        // id estable es la llave cara-voz. Luego pintamos cada cara con el color de
+        // su hablante si ya se asocio una voz con esa identidad.
+        val tracked = faceIdentifier.identify(faces).map { f ->
             f.copy(speaker = faceVoiceBinder.speakerFor(f.trackId))
         }
         val audioActive = s.isListening &&
@@ -643,7 +645,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         // Memoria de rostros (spec §6): si la cara activa coincide con una persona
         // enrolada en el escaneo, su nombre y foto pasan a este hablante para
         // mostrar un avatar real en el chat en vez de un circulo de color.
-        faceMemory.match(activeFace?.signature)?.let { person ->
+        val personId = activeFace?.personId ?: -1
+        if (personId >= 0) faceMemory.byId(personId)?.let { person ->
             if (!person.name.isNullOrBlank()) speakers.rename(speaker, person.name)
             person.photo?.let { speakerPhotos[speaker.index] = it.asImageBitmap() }
         }
