@@ -87,6 +87,13 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
         // Centro del embedding neuronal (sherpa-onnx), L2-normalizado, o null si
         // esta voz aun no tiene huella neuronal asociada.
         var emb: FloatArray? = null
+        // Galeria de huellas de una voz ENROLADA (varias ventanas del
+        // enrolamiento). Se compara por coseno MAXIMO contra ella, lo que
+        // reconoce mucho mejor que solo el centroide. Fija (no se adapta).
+        var embGallery: List<FloatArray>? = null
+        // Si esta voz vino de una persona ENROLADA en el escaneo, su id en
+        // PersonStore (>=0); -1 si se descubrio sola durante la conversacion.
+        var personId: Int = -1
 
         /** Distancia de Mahalanobis diagonal (z-score) ponderada al vector dado. */
         fun distance(pitch: Float, spread: Float, bright: Float): Float {
@@ -182,7 +189,8 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
         if (faceHint != null) {
             val c = clusters.firstOrNull { it.index == faceHint.index }
             if (c != null) {
-                if (embedding != null) updateEmb(c, embedding)
+                // Las voces enroladas mantienen su huella ancla (no derivan).
+                if (embedding != null && c.personId < 0) updateEmb(c, embedding)
                 if (profile.voiced && profile.frames >= STRONG_FRAMES) {
                     c.update(profile.medianPitch, profile.pitchSpread, profile.brightness)
                 }
@@ -282,6 +290,9 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
                 for (j in i + 1 until clusters.size) {
                     val a = clusters[i]
                     val b = clusters[j]
+                    // Nunca fusionamos voces enroladas: cada persona del escaneo
+                    // conserva su propio cluster (nombre/foto/personId).
+                    if (a.personId >= 0 || b.personId >= 0) continue
                     if (centroidDistance(a, b) < MERGE_DIST) {
                         val keep = if (a.count >= b.count) a else b
                         val drop = if (keep === a) b else a
@@ -344,11 +355,11 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
             return lastSpeaker
         }
 
-        // Mejor coincidencia por coseno.
+        // Mejor coincidencia por coseno MAXIMO contra centroide + galeria.
         var best = withEmb[0]
-        var bestSim = cosine(best.emb!!, x)
+        var bestSim = simTo(best, x)
         for (c in withEmb) {
-            val s = cosine(c.emb!!, x)
+            val s = simTo(c, x)
             if (s > bestSim) {
                 bestSim = s
                 best = c
@@ -370,7 +381,8 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
         // (entre NEW y SAME) se asigna al mejor pero NO se mueve el centro, para
         // no contaminar la voz con una frase ambigua.
         if (bestSim >= EMB_SAME) {
-            updateEmb(best, x)
+            // No movemos la huella de una voz enrolada: es el ancla de referencia.
+            if (best.personId < 0) updateEmb(best, x)
             if (profile.voiced) best.update(pitch, spread, bright)
             best.count++
             mergeNearDuplicatesEmb()
@@ -395,6 +407,23 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
             }
         }
         return nearest
+    }
+
+    /**
+     * Similitud de [x] a una voz: coseno MAXIMO contra su centroide y, si es una
+     * voz enrolada, contra cada huella de su galeria. Asi una frase real que se
+     * parezca a CUALQUIER ventana del enrolamiento se reconoce, aunque no coincida
+     * con el promedio.
+     */
+    private fun simTo(c: Cluster, x: FloatArray): Float {
+        var best = c.emb?.let { cosine(it, x) } ?: -1f
+        c.embGallery?.let { g ->
+            for (e in g) {
+                val s = cosine(e, x)
+                if (s > best) best = s
+            }
+        }
+        return best
     }
 
     /** Coseno entre dos vectores (los embeddings ya vienen ~L2-normalizados). */
@@ -438,6 +467,8 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
                 for (j in i + 1 until clusters.size) {
                     val a = clusters[i]
                     val b = clusters[j]
+                    // Las voces enroladas no se fusionan (ver mergeNearDuplicates).
+                    if (a.personId >= 0 || b.personId >= 0) continue
                     val ea = a.emb
                     val eb = b.emb
                     if (ea != null && eb != null && cosine(ea, eb) > EMB_MERGE) {
@@ -485,7 +516,64 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
         store?.clear()
     }
 
+    // --- Siembra de voces enroladas en el escaneo (spec 6) ---
+
+    /** Voz capturada durante el escaneo: persona + nombre + huella neuronal. */
+    data class Enrolled(
+        val personId: Int,
+        val name: String?,
+        val embedding: FloatArray,
+        val gallery: List<FloatArray> = emptyList(),
+    )
+
+    /**
+     * Siembra las voces grabadas durante el escaneo. Crea un cluster ya "maduro"
+     * por cada persona enrolada, con su huella neuronal y su nombre, para
+     * reconocerla desde la primera palabra AUNQUE no se le vea la cara y sin
+     * arranque en frio. Reemplaza cualquier siembra anterior (idempotente) y NO
+     * se persiste en [SpeakerStore]: su memoria vive en PersonStore. Devuelve el
+     * indice de hablante asignado a cada personId, para enlazar su foto/avatar.
+     */
+    fun seedEnrolled(entries: List<Enrolled>): Map<Int, Int> {
+        // Quita siembras previas para no duplicar al re-sembrar.
+        clusters.removeAll { it.personId >= 0 }
+        val map = HashMap<Int, Int>()
+        for (e in entries) {
+            if (e.embedding.isEmpty()) continue
+            val c = Cluster(nextIndex, e.name, 0.5f, 0.1f, 0.5f)
+            c.emb = normalizedCopy(e.embedding)
+            c.embGallery = e.gallery
+                .map { normalizedCopy(it) }
+                .takeIf { it.isNotEmpty() }
+            c.personId = e.personId
+            c.count = MATURE_COUNT
+            clusters.add(c)
+            map[e.personId] = nextIndex
+            nextIndex++
+        }
+        // Reapunta al ultimo hablante si quedo sobre un cluster retirado.
+        if (clusters.none { it.index == lastSpeaker.index }) {
+            lastSpeaker = manual ?: (clusters.firstOrNull()?.let { Speaker(it.index) } ?: Speaker.First)
+        }
+        persist()
+        return map
+    }
+
+    /** Indice de hablante ligado a una persona enrolada, o null. */
+    fun speakerForPerson(personId: Int): Speaker? =
+        clusters.firstOrNull { it.personId == personId }?.let { Speaker(it.index) }
+
+    private fun normalizedCopy(x: FloatArray): FloatArray {
+        var n = 0f
+        for (v in x) n += v * v
+        val s = sqrt(n)
+        if (s < 1e-6f) return x.copyOf()
+        return FloatArray(x.size) { x[it] / s }
+    }
+
     private fun persist() {
-        store?.save(clusters.map { it.toProfile() })
+        // Solo se guardan las voces descubiertas en conversacion; las enroladas
+        // (personId>=0) viven en PersonStore y se re-siembran al arrancar.
+        store?.save(clusters.filter { it.personId < 0 }.map { it.toProfile() })
     }
 }

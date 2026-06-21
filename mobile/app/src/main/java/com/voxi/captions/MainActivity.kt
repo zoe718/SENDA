@@ -145,6 +145,8 @@ private fun VoxiApp() {
             onName = viewModel::nameScanPerson,
             onFinish = viewModel::finishScan,
             onSkip = viewModel::skipScan,
+            onReRecordVoice = viewModel::startVoiceEnroll,
+            scanRecordingLocalId = state.scanRecordingLocalId,
             modifier = Modifier.fillMaxSize(),
         )
         state.showHistory -> HistoryScreen(
@@ -197,13 +199,13 @@ private fun PermissionRequest(onRequest: () -> Unit) {
         VoxiBadge(size = 72.dp)
         Spacer(Modifier.size(20.dp))
         Text(
-            text = "Voxi",
+            text = "SENDA",
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
             text = "Subtitulos en vivo, con el tono y el lugar de cada voz. " +
-                "Para empezar, Voxi necesita acceso al microfono.",
+                "Para empezar, SENDA necesita acceso al microfono.",
             style = MaterialTheme.typography.bodyLarge,
             color = VoxiSlate,
             textAlign = TextAlign.Center,

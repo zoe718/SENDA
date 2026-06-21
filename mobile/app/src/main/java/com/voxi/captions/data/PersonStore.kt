@@ -24,12 +24,24 @@ class PersonStore(context: Context) {
         appContext.getSharedPreferences("voxi_people", Context.MODE_PRIVATE)
     private val facesDir = File(appContext.filesDir, "faces").apply { mkdirs() }
 
-    /** Persona enrolada: rostro + nombre + foto. */
+    /**
+     * Persona enrolada: rostro + nombre + foto + (opcional) huella de voz.
+     *
+     * [voiceEmbedding] es el vector neuronal (sherpa-onnx) capturado mientras la
+     * persona dice una frase durante el escaneo. Permite reconocer su voz aunque
+     * NO se le vea la cara (fuera de cuadro) y evita el arranque en frio de la
+     * diarizacion. Es opcional: si no se grabo voz, queda null y solo se usa la
+     * cara.
+     */
     data class Person(
         val id: Int,
         val name: String?,
         val signature: FloatArray,
         val photoPath: String?,
+        val voiceEmbedding: FloatArray? = null,
+        // Galeria de huellas (varias ventanas del enrolamiento). Reconoce mucho
+        // mejor que el centroide solo, comparando por coseno maximo. Opcional.
+        val voiceGallery: List<FloatArray>? = null,
     )
 
     fun load(): List<Person> {
@@ -41,11 +53,27 @@ class PersonStore(context: Context) {
                 val sigArr = o.getJSONArray("sig")
                 val sig = FloatArray(sigArr.length()) { j -> sigArr.getDouble(j).toFloat() }
                 if (sig.isEmpty()) return@mapNotNull null
+                val voiceArr = if (o.has("voice") && !o.isNull("voice")) o.getJSONArray("voice") else null
+                val voice = voiceArr
+                    ?.let { v -> FloatArray(v.length()) { j -> v.getDouble(j).toFloat() } }
+                    ?.takeIf { it.isNotEmpty() }
+                // Galeria de huellas (nuevo formato "voices"): array de arrays.
+                val galleryArr =
+                    if (o.has("voices") && !o.isNull("voices")) o.getJSONArray("voices") else null
+                val gallery = galleryArr?.let { g ->
+                    (0 until g.length()).mapNotNull { k ->
+                        val ga = g.getJSONArray(k)
+                        FloatArray(ga.length()) { j -> ga.getDouble(j).toFloat() }
+                            .takeIf { it.isNotEmpty() }
+                    }
+                }?.takeIf { it.isNotEmpty() }
                 Person(
                     id = o.getInt("id"),
                     name = if (o.isNull("name")) null else o.getString("name"),
                     signature = sig,
                     photoPath = if (o.isNull("photo")) null else o.getString("photo"),
+                    voiceEmbedding = voice,
+                    voiceGallery = gallery,
                 )
             }
         }.getOrDefault(emptyList())
@@ -56,12 +84,24 @@ class PersonStore(context: Context) {
         people.forEach { p ->
             val sig = JSONArray()
             p.signature.forEach { sig.put(it.toDouble()) }
+            val voice = p.voiceEmbedding?.let { emb ->
+                JSONArray().also { arrv -> emb.forEach { arrv.put(it.toDouble()) } }
+            }
+            val voices = p.voiceGallery?.takeIf { it.isNotEmpty() }?.let { gallery ->
+                JSONArray().also { g ->
+                    gallery.forEach { emb ->
+                        g.put(JSONArray().also { arrv -> emb.forEach { arrv.put(it.toDouble()) } })
+                    }
+                }
+            }
             arr.put(
                 JSONObject()
                     .put("id", p.id)
                     .put("name", p.name ?: JSONObject.NULL)
                     .put("sig", sig)
-                    .put("photo", p.photoPath ?: JSONObject.NULL),
+                    .put("photo", p.photoPath ?: JSONObject.NULL)
+                    .put("voice", voice ?: JSONObject.NULL)
+                    .put("voices", voices ?: JSONObject.NULL),
             )
         }
         prefs.edit().putString(KEY, arr.toString()).apply()

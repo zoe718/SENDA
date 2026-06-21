@@ -90,6 +90,9 @@ data class ConversationUiState(
     // Caras detectadas en vivo durante el escaneo (para dibujar sus marcos sobre
     // el preview y dejar tocar a cada persona para enrolarla). Transitorio.
     val scanLiveFaces: List<DetectedFace> = emptyList(),
+    // localId de la persona cuya VOZ se esta grabando ahora mismo en el escaneo
+    // (>=0 mientras corre la grabacion de ~3 s); -1 si no hay grabacion activa.
+    val scanRecordingLocalId: Int = -1,
     // Identidad (nombre + foto) por indice de hablante, para pintar el avatar y
     // el nombre real en el chat en vez de "Hablante N" y un circulo de color.
     val speakerIdentities: Map<Int, SpeakerIdentity> = emptyMap(),
@@ -109,6 +112,8 @@ data class ScanPerson(
     // cuadro; -1 para personas sembradas de sesiones anteriores). Sirve para
     // marcar su rostro como "ya agregado" sobre el preview en vivo.
     val trackId: Int = -1,
+    // true si ya se grabo su huella de voz (para mostrar el sello de "voz lista").
+    val hasVoice: Boolean = false,
 )
 
 /** Identidad enrolada de un hablante: nombre y foto para mostrar en el chat. */
@@ -131,6 +136,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     // Capa 2 (spec §6): memoria de rostros persistente + matcher en runtime.
     private val personStore = PersonStore(app)
     private val faceMemory = FaceMemory()
+    // Foto enrolada por indice de hablante (se llena al fusionar cara↔voz).
+    // Debe declararse ANTES del bloque init: seedEnrolledVoices() lo usa en init.
+    private val speakerPhotos = HashMap<Int, ImageBitmap>()
     // Reconocimiento facial (spec §6): da a cada rostro una identidad ESTABLE que
     // sobrevive a los reinicios del trackId nativo de ML Kit y reconoce a las
     // personas enroladas. Su id estable es la llave cara-voz de todo el pipeline.
@@ -176,6 +184,22 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var uttBuf = ShortArray(AudioCapture.SAMPLE_RATE * 4)
     private var uttLen = 0
 
+    // --- Enrolamiento de voz durante el escaneo (spec 6) ---
+    // Mientras enrollActive, el loop de captura vuelca el PCM del microfono en
+    // enrollBuf para sacarle la huella neuronal de la persona que se esta
+    // agregando (dice la frase sugerida ~6 s). Grabamos mas tiempo a proposito:
+    // con mas audio el embedding robusto (varias ventanas promediadas) queda
+    // mucho mas estable y la persona se reconoce mejor despues.
+    @Volatile
+    private var enrollActive = false
+    // Capacidad = ENROLL_MS + margen, para no truncar la grabacion.
+    private var enrollBuf = ShortArray(AudioCapture.SAMPLE_RATE * 8)
+    private var enrollLen = 0
+    private var enrollLocalId = -1
+    private val ENROLL_MS = 6_000L
+    // Energia RMS minima para dar la grabacion por valida (que de verdad hablo).
+    private val ENROLL_RMS_FLOOR = 220.0
+
     init {
         // Voz del TTS: aplica la elegida (o marca que falta elegir, 1a vez).
         _uiState.update {
@@ -188,6 +212,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.Default) { embedder.load() }
         // Carga la memoria de rostros aprendida en escaneos anteriores (spec §6).
         loadFaceMemory()
+        // Siembra las voces enroladas para reconocerlas desde la 1a palabra (spec 6).
+        seedEnrolledVoices()
         viewModelScope.launch {
             runCatching { vosk.load(getApplication()) }
                 .onSuccess { _uiState.update { it.copy(isModelLoading = false) } }
@@ -213,6 +239,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 var ttsMuted = false
                 audio.frames().collect { frame ->
+                    // Enrolamiento de voz (escaneo): vuelca el PCM en su buffer.
+                    if (enrollActive) appendEnroll(frame.samples, frame.length)
                     if (!vosk.isReady) return@collect
                     // Fix del eco del TTS (spec §7): mientras el telefono habla en
                     // voz alta, su propia voz entra por el microfono. Si la
@@ -390,6 +418,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 speakerIdentities = emptyMap(),
             )
         }
+        // Re-siembra las voces enroladas tras el reset de sesion.
+        seedEnrolledVoices()
     }
 
     // --- Historial (spec §10) ---
@@ -493,7 +523,13 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         // sigue en cuadro; -1 si vino sembrada de disco). Evita duplicar el mismo
         // rostro y permite marcarlo como "ya agregado" sobre el preview en vivo.
         var trackId: Int,
-    )
+    ) {
+        // Huella neuronal de voz capturada en el escaneo (sherpa-onnx), o null.
+        var voiceEmbedding: FloatArray? = null
+        // Galeria de huellas (ventanas del enrolamiento) para comparar por coseno
+        // maximo. Mejora mucho el reconocimiento. Vacia/null si no se grabo voz.
+        var voiceGallery: List<FloatArray>? = null
+    }
 
     private val scanLock = Any()
     private val scanEntries = mutableListOf<ScanEntry>()
@@ -502,8 +538,6 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     // para enrolar justo a la que el usuario toque sobre el preview.
     @Volatile
     private var latestScanFaces: List<DetectedFace> = emptyList()
-    // Foto enrolada por indice de hablante (se llena al fusionar cara↔voz).
-    private val speakerPhotos = HashMap<Int, ImageBitmap>()
 
     /** Carga en runtime la memoria de rostros guardada en disco (spec §6). */
     private fun loadFaceMemory() {
@@ -523,7 +557,11 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             personStore.load().forEach { p ->
                 val photo = personStore.loadPhoto(p.photoPath) ?: return@forEach
                 scanEntries.add(
-                    ScanEntry(scanNextLocalId++, p.id, p.name, p.signature, photo, photo.asImageBitmap(), -1),
+                    ScanEntry(scanNextLocalId++, p.id, p.name, p.signature, photo, photo.asImageBitmap(), -1)
+                        .also {
+                            it.voiceEmbedding = p.voiceEmbedding
+                            it.voiceGallery = p.voiceGallery
+                        },
                 )
             }
         }
@@ -546,7 +584,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     /** Enrola a la persona cuyo rostro (trackId) toco el usuario sobre el preview. */
     fun captureScanFace(trackId: Int) {
         if (trackId < 0) return
-        var changed = false
+        // Un enrolamiento a la vez: mientras se graba una voz no aceptamos otra
+        // captura, asi cada persona dice su frase sin pisarse con la siguiente.
+        if (enrollActive) return
+        var newLocalId = -1
         synchronized(scanLock) {
             val alreadyIn = scanEntries.any { it.trackId == trackId }
             if (!alreadyIn && scanEntries.size < MAX_SCAN_PEOPLE) {
@@ -554,14 +595,18 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 val sig = face?.signature
                 val bmp = face?.thumbnail
                 if (sig != null && bmp != null) {
-                    scanEntries.add(
-                        ScanEntry(scanNextLocalId++, -1, null, sig, bmp, bmp.asImageBitmap(), trackId),
-                    )
-                    changed = true
+                    val entry =
+                        ScanEntry(scanNextLocalId++, -1, null, sig, bmp, bmp.asImageBitmap(), trackId)
+                    scanEntries.add(entry)
+                    newLocalId = entry.localId
                 }
             }
         }
-        if (changed) publishScan()
+        if (newLocalId >= 0) {
+            publishScan()
+            // Foto al instante + graba ~3 s de su voz (avatar y reconocimiento).
+            startVoiceEnroll(newLocalId)
+        }
     }
 
     /** Quita a una persona del escaneo (capturada por error o que sobra). */
@@ -588,13 +633,15 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
             val people = scanEntries.map { e ->
                 val id = if (e.personId >= 0) e.personId else nextId++
                 val path = personStore.savePhoto(id, e.bitmap)
-                PersonStore.Person(id, e.name, e.signature, path)
+                PersonStore.Person(id, e.name, e.signature, path, e.voiceEmbedding, e.voiceGallery)
             }
             personStore.save(people)
             scanEntries.clear()
         }
         latestScanFaces = emptyList()
         loadFaceMemory()
+        // Siembra las voces recien grabadas para reconocerlas en la conversacion.
+        seedEnrolledVoices()
         _uiState.update {
             it.copy(isScanning = false, needsScan = false, scanPeople = emptyList(), scanLiveFaces = emptyList())
         }
@@ -604,6 +651,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     fun skipScan() {
         synchronized(scanLock) { scanEntries.clear() }
         latestScanFaces = emptyList()
+        // Aun omitiendo, sembramos las voces ya guardadas en disco.
+        seedEnrolledVoices()
         _uiState.update {
             it.copy(isScanning = false, needsScan = false, scanPeople = emptyList(), scanLiveFaces = emptyList())
         }
@@ -611,9 +660,94 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun publishScan() {
         val list = synchronized(scanLock) {
-            scanEntries.map { ScanPerson(it.localId, it.name, it.image, it.trackId) }
+            scanEntries.map {
+                ScanPerson(it.localId, it.name, it.image, it.trackId, it.voiceEmbedding != null)
+            }
         }
         _uiState.update { it.copy(scanPeople = list) }
+    }
+
+    /**
+     * Siembra en el SpeakerTracker las voces grabadas en el escaneo (spec 6):
+     * cada persona enrolada con huella de voz se reconoce desde la primera
+     * palabra, aun fuera de cuadro, con su nombre y avatar. La foto se liga al
+     * indice de hablante para el avatar del chat.
+     */
+    private fun seedEnrolledVoices() {
+        val people = personStore.load()
+        val enrolled = people.mapNotNull { p ->
+            p.voiceEmbedding?.let {
+                SpeakerTracker.Enrolled(p.id, p.name, it, p.voiceGallery ?: emptyList())
+            }
+        }
+        val indexByPerson = speakers.seedEnrolled(enrolled)
+        for (p in people) {
+            val idx = indexByPerson[p.id] ?: continue
+            personStore.loadPhoto(p.photoPath)?.let { speakerPhotos[idx] = it.asImageBitmap() }
+        }
+        _uiState.update {
+            it.copy(knownSpeakers = speakers.knownSpeakers, speakerIdentities = buildIdentities())
+        }
+    }
+
+    /** Graba ~6 s de la voz de la persona [localId] y guarda su huella neuronal. */
+    fun startVoiceEnroll(localId: Int) {
+        if (enrollActive) return
+        val exists = synchronized(scanLock) { scanEntries.any { it.localId == localId } }
+        if (!exists) return
+        enrollLen = 0
+        enrollLocalId = localId
+        enrollActive = true
+        _uiState.update { it.copy(scanRecordingLocalId = localId) }
+        viewModelScope.launch {
+            delay(ENROLL_MS)
+            finishVoiceEnroll()
+        }
+    }
+
+    private fun finishVoiceEnroll() {
+        if (!enrollActive) return
+        enrollActive = false
+        val localId = enrollLocalId
+        enrollLocalId = -1
+        val len = enrollLen
+        viewModelScope.launch(Dispatchers.Default) {
+            // Valida que de verdad haya voz (no silencio) antes de calcular huella.
+            val loud = rmsOf(enrollBuf, len) >= ENROLL_RMS_FLOOR
+            // Huella como GALERIA: el centroide + cada ventana del audio largo.
+            // Comparar luego por coseno maximo reconoce mucho mejor (spec 6).
+            val print = if (loud && embedder.isReady) embedder.enrollVoiceprint(enrollBuf, len) else null
+            if (print != null) {
+                synchronized(scanLock) {
+                    scanEntries.firstOrNull { it.localId == localId }?.let {
+                        it.voiceEmbedding = print.centroid
+                        it.voiceGallery = print.windows
+                    }
+                }
+            }
+            _uiState.update { it.copy(scanRecordingLocalId = -1) }
+            publishScan()
+        }
+    }
+
+    /** Acumula el PCM de la grabacion de voz del escaneo (tope = tamano del buffer). */
+    private fun appendEnroll(samples: ShortArray, length: Int) {
+        if (length <= 0) return
+        val n = length.coerceAtMost(enrollBuf.size - enrollLen)
+        if (n <= 0) return
+        System.arraycopy(samples, 0, enrollBuf, enrollLen, n)
+        enrollLen += n
+    }
+
+    private fun rmsOf(buf: ShortArray, len: Int): Double {
+        if (len <= 0) return 0.0
+        var sum = 0.0
+        val n = len.coerceAtMost(buf.size)
+        for (i in 0 until n) {
+            val v = buf[i].toDouble()
+            sum += v * v
+        }
+        return kotlin.math.sqrt(sum / n)
     }
 
     /** Identidad (nombre + foto) por indice de hablante, para el avatar del chat. */

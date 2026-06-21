@@ -40,7 +40,7 @@ object TranscriptExporter {
         val header = SimpleDateFormat("dd 'de' MMMM yyyy, HH:mm", Locale.forLanguageTag("es"))
             .format(date)
         return buildString {
-            appendLine("Voxi - Conversacion")
+            appendLine("SENDA - Conversacion")
             appendLine(header)
             appendLine("=".repeat(32))
             appendLine()
@@ -49,7 +49,7 @@ object TranscriptExporter {
                 appendLine("[${u.speaker.displayName}]$tag ${u.text}")
             }
             appendLine()
-            appendLine("Generado con Voxi - subtitulos espaciales con tono de voz.")
+            appendLine("Generado con SENDA - subtitulos espaciales con tono de voz.")
         }
     }
 

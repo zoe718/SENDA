@@ -9,6 +9,9 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -39,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +96,8 @@ fun ScanScreen(
     onName: (Int, String) -> Unit,
     onFinish: () -> Unit,
     onSkip: () -> Unit,
+    onReRecordVoice: (Int) -> Unit = {},
+    scanRecordingLocalId: Int = -1,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -260,6 +267,11 @@ fun ScanScreen(
                 )
             }
         }
+
+        // Grabando la voz de la persona recien tocada: frase + progreso de ~6 s.
+        if (scanRecordingLocalId >= 0) {
+            VoiceEnrollOverlay()
+        }
     }
 
     naming?.let { person ->
@@ -269,8 +281,84 @@ fun ScanScreen(
                 onName(person.localId, name)
                 naming = null
             },
+            onReRecord = {
+                naming = null
+                onReRecordVoice(person.localId)
+            },
             onDismiss = { naming = null },
         )
+    }
+}
+
+/** Frase sugerida para el enrolamiento de voz (suficiente para ~6 s de audio). */
+private const val VOICE_PHRASE =
+    "Hola, que gusto verte. Asi suena mi voz cuando hablo. " +
+        "Me alegra mucho poder conversar contigo y que entiendas lo que digo."
+
+/**
+ * Capa de grabacion de voz (spec 6): cubre la pantalla mientras se capturan ~6 s
+ * de la persona. Muestra una frase sugerida (la voz es text-independent, asi que
+ * el contenido no importa: solo asegura que hable lo suficiente) y un progreso.
+ */
+@Composable
+private fun VoiceEnrollOverlay() {
+    var started by remember { mutableStateOf(false) }
+    val progress by animateFloatAsState(
+        targetValue = if (started) 1f else 0f,
+        animationSpec = tween(durationMillis = 6000, easing = LinearEasing),
+        label = "voiceEnroll",
+    )
+    LaunchedEffect(Unit) { started = true }
+    Box(
+        modifier = Modifier.fillMaxSize().background(VoxiBg.copy(alpha = 0.82f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(28.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(VoxiSurface)
+                .border(1.dp, VoxiTeal.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                .padding(22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "Escuchando la voz",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = VoxiTeal,
+            )
+            Spacer(Modifier.size(10.dp))
+            Text(
+                text = "Pidele que diga en voz alta:",
+                style = MaterialTheme.typography.bodySmall,
+                color = VoxiSlate,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.size(6.dp))
+            Text(
+                text = "\"$VOICE_PHRASE\"",
+                style = MaterialTheme.typography.titleSmall,
+                color = VoxiMint,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.size(18.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(VoxiSurfaceHigh),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(VoxiTeal),
+                )
+            }
+        }
     }
 }
 
@@ -388,6 +476,21 @@ private fun ScanFaceCard(person: ScanPerson, onClick: () -> Unit, onRemove: () -
                 textAlign = TextAlign.Center,
             )
         }
+        // Sello "voz lista": la persona ya tiene su huella de voz grabada.
+        if (person.hasVoice) {
+            Text(
+                text = "voz",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = VoxiBg,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(2.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(VoxiTeal)
+                    .padding(horizontal = 6.dp, vertical = 1.dp),
+            )
+        }
         // Boton quitar (✕) en la esquina superior derecha de la tarjeta.
         Text(
             text = "x",
@@ -437,6 +540,7 @@ private fun ScanButton(
 private fun NameDialog(
     person: ScanPerson,
     onConfirm: (String) -> Unit,
+    onReRecord: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var text by remember(person.localId) { mutableStateOf(person.name.orEmpty()) }
@@ -481,6 +585,13 @@ private fun NameDialog(
                         cursorColor = VoxiTeal,
                     ),
                 )
+                Spacer(Modifier.size(6.dp))
+                TextButton(onClick = onReRecord) {
+                    Text(
+                        text = if (person.hasVoice) "Regrabar voz" else "Grabar voz",
+                        color = VoxiTeal,
+                    )
+                }
             }
         },
     )
