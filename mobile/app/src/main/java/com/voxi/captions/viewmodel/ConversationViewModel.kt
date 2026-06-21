@@ -2,6 +2,9 @@ package com.voxi.captions.viewmodel
 
 import android.app.Application
 import android.content.Context
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.voxi.captions.audio.AudioCapture
@@ -9,6 +12,7 @@ import com.voxi.captions.audio.ProsodyAnalyzer
 import com.voxi.captions.audio.SpeakerEmbedder
 import com.voxi.captions.audio.VoskEngine
 import com.voxi.captions.data.ConversationStore
+import com.voxi.captions.data.PersonStore
 import com.voxi.captions.data.SessionMeta
 import com.voxi.captions.data.SettingsStore
 import com.voxi.captions.data.SpeakerStore
@@ -25,6 +29,7 @@ import com.voxi.captions.tts.AndroidTts
 import com.voxi.captions.tts.ElevenLabsTts
 import com.voxi.captions.vision.ActiveSpeaker
 import com.voxi.captions.vision.DetectedFace
+import com.voxi.captions.vision.FaceMemory
 import com.voxi.captions.vision.FaceTracker
 import com.voxi.captions.vision.FaceVoiceBinder
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +67,10 @@ data class ConversationUiState(
     val cameraAspect: Float = 0.75f,
     // Modo C (spec §6): direccion estimada del sonido (-1 izq .. +1 der) o null.
     val soundDirection: Float? = null,
+    // Modo C (spec §6): true SOLO cuando, de forma sostenida, hay voz en curso y
+    // ninguna cara visible esta hablando -> el hablante esta fuera de cuadro. Se
+    // calcula con debounce en el ViewModel para que el aviso no parpadee.
+    val speakerOffscreen: Boolean = false,
     // Voz del TTS elegida al inicio (spec §7).
     val voiceType: VoiceType = VoiceType.Default,
     val needsVoiceSelection: Boolean = false,
@@ -72,10 +81,41 @@ data class ConversationUiState(
     val showHistory: Boolean = false,
     val historySessions: List<SessionMeta> = emptyList(),
     val viewingUtterances: List<Utterance>? = null,
+    // Capa 2 (spec §6): escaneo inicial de rostros + memoria cara↔voz.
+    // needsScan = aun no se ha escaneado en esta sesion; isScanning = pantalla de
+    // escaneo abierta; scanPeople = rostros capturados (para nombrarlos).
+    val needsScan: Boolean = true,
+    val isScanning: Boolean = false,
+    val scanPeople: List<ScanPerson> = emptyList(),
+    // Caras detectadas en vivo durante el escaneo (para dibujar sus marcos sobre
+    // el preview y dejar tocar a cada persona para enrolarla). Transitorio.
+    val scanLiveFaces: List<DetectedFace> = emptyList(),
+    // Identidad (nombre + foto) por indice de hablante, para pintar el avatar y
+    // el nombre real en el chat en vez de "Hablante N" y un circulo de color.
+    val speakerIdentities: Map<Int, SpeakerIdentity> = emptyMap(),
+    // Capa 4: el usuario silencio el microfono a proposito (pausa la escucha).
+    val isMuted: Boolean = false,
 )
 
 /** Resultado puntual de exportar, para mostrar un aviso de una sola vez (spec §10). */
 data class ExportResult(val success: Boolean, val message: String)
+
+/** Rostro capturado en el escaneo inicial (spec §6), listo para enrolar. */
+data class ScanPerson(
+    val localId: Int,
+    val name: String?,
+    val photo: ImageBitmap,
+    // Id de tracking nativo con el que se capturo (>=0 si la persona sigue en
+    // cuadro; -1 para personas sembradas de sesiones anteriores). Sirve para
+    // marcar su rostro como "ya agregado" sobre el preview en vivo.
+    val trackId: Int = -1,
+)
+
+/** Identidad enrolada de un hablante: nombre y foto para mostrar en el chat. */
+data class SpeakerIdentity(
+    val name: String?,
+    val photo: ImageBitmap?,
+)
 
 class ConversationViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -91,6 +131,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     // rostro corresponde a que voz, para colorear contornos y guiar la diarizacion.
     private val faceTracker = FaceTracker()
     private val faceVoiceBinder = FaceVoiceBinder()
+    // Capa 2 (spec §6): memoria de rostros persistente + matcher en runtime.
+    private val personStore = PersonStore(app)
+    private val faceMemory = FaceMemory()
     private val tts by lazy { AndroidTts(getApplication()) }
     // Voz humana de ElevenLabs (spec §7): si hay clave e internet sintetiza una
     // voz expresiva; si no, cae al TTS nativo de Android.
@@ -110,6 +153,12 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private var replyJob: Job? = null
     // Ultimo contexto por el que ya pedimos sugerencias (dedup de cuota Gemini).
     private var lastSuggestKey: String? = null
+    // Frames seguidos con voz pero sin cara hablante (debounce de "fuera de cuadro").
+    private var offscreenFrames = 0
+    // Frames sostenidos necesarios para declarar al hablante fuera de cuadro (~0.5 s).
+    private val OFFSCREEN_FRAMES = 5
+    // Tope de personas enroladas en un escaneo.
+    private val MAX_SCAN_PEOPLE = 8
 
     // Id de la sesión actual (timestamp de inicio) para el guardado automático.
     private var sessionId = System.currentTimeMillis()
@@ -136,6 +185,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         // Carga el modelo de embeddings en segundo plano (pesado ~25 MB); si
         // falla, la app sigue con la diarizacion heuristica.
         viewModelScope.launch(Dispatchers.Default) { embedder.load() }
+        // Carga la memoria de rostros aprendida en escaneos anteriores (spec §6).
+        loadFaceMemory()
         viewModelScope.launch {
             runCatching { vosk.load(getApplication()) }
                 .onSuccess { _uiState.update { it.copy(isModelLoading = false) } }
@@ -241,6 +292,20 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         saveNow()
     }
 
+    /**
+     * Capa 4: silenciar/reactivar el microfono a voluntad. Al silenciar se pausa
+     * la captura (la persona deja de ser transcrita); al reactivar, se reanuda.
+     */
+    fun toggleMute() {
+        if (_uiState.value.isMuted) {
+            _uiState.update { it.copy(isMuted = false) }
+            startListening()
+        } else {
+            stopListening()
+            _uiState.update { it.copy(isMuted = true, partialText = "") }
+        }
+    }
+
     /** Vía de regreso (spec §7): la persona sorda escribe y el teléfono lo dice. */
     fun speak(text: String) {
         val clean = text.trim()
@@ -312,6 +377,8 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         faceTracker.reset()
         faceVoiceBinder.reset()
         replyJob?.cancel()
+        // Las fotos cara↔voz tambien son por sesion: una conversacion nueva las olvida.
+        speakerPhotos.clear()
         _uiState.update {
             it.copy(
                 utterances = emptyList(),
@@ -319,6 +386,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 anchoredCaption = null,
                 knownSpeakers = speakers.knownSpeakers,
                 suggestedReplies = emptyList(),
+                speakerIdentities = emptyMap(),
             )
         }
     }
@@ -378,16 +446,24 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onFacesDetected(faces: List<DetectedFace>) {
         val s = _uiState.value
-        // Asigna ids estables y pinta cada cara con el color de su hablante (si ya
-        // se asocio una voz con ese rostro).
-        val tracked = faceTracker.track(faces).map { f ->
+        // Face Detection ya trae ids de tracking nativos y estables, asi que no
+        // necesitamos el emparejamiento manual de FaceTracker. Solo pintamos cada
+        // cara con el color de su hablante (si ya se asocio una voz con ese rostro).
+        val tracked = faces.map { f ->
             f.copy(speaker = faceVoiceBinder.speakerFor(f.trackId))
         }
         val audioActive = s.isListening &&
             (s.partialText.isNotBlank() || s.partialTone.volume > 0.35f)
         val active = activeSpeaker.update(tracked, audioActive)
         val aspect = tracked.firstOrNull()?.imageAspect?.takeIf { it > 0f } ?: s.cameraAspect
-        _uiState.update { it.copy(faces = tracked, activeFace = active, cameraAspect = aspect) }
+        // Debounce del "fuera de cuadro": solo lo damos por cierto si hay voz y
+        // ninguna cara visible es el hablante durante varios frames seguidos; un
+        // unico frame nulo (pausa natural entre silabas) NO debe disparar el aviso.
+        offscreenFrames = if (audioActive && active == null) (offscreenFrames + 1) else 0
+        val offscreen = offscreenFrames >= OFFSCREEN_FRAMES
+        _uiState.update {
+            it.copy(faces = tracked, activeFace = active, cameraAspect = aspect, speakerOffscreen = offscreen)
+        }
     }
 
     /** Modo A (spec §6): el usuario fija un carril, o null para diarización automática. */
@@ -400,6 +476,155 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 knownSpeakers = speakers.knownSpeakers,
             )
         }
+    }
+
+    // --- Capa 2 (spec §6): escaneo inicial de rostros + memoria cara↔voz ---
+
+    private class ScanEntry(
+        val localId: Int,
+        var personId: Int,
+        var name: String?,
+        val signature: FloatArray,
+        val bitmap: Bitmap,
+        val image: ImageBitmap,
+        // Id de tracking nativo con el que se enrolo (>=0 mientras la persona
+        // sigue en cuadro; -1 si vino sembrada de disco). Evita duplicar el mismo
+        // rostro y permite marcarlo como "ya agregado" sobre el preview en vivo.
+        var trackId: Int,
+    )
+
+    private val scanLock = Any()
+    private val scanEntries = mutableListOf<ScanEntry>()
+    private var scanNextLocalId = 0
+    // Ultimas caras detectadas en vivo durante el escaneo (con miniatura y firma),
+    // para enrolar justo a la que el usuario toque sobre el preview.
+    @Volatile
+    private var latestScanFaces: List<DetectedFace> = emptyList()
+    // Foto enrolada por indice de hablante (se llena al fusionar cara↔voz).
+    private val speakerPhotos = HashMap<Int, ImageBitmap>()
+
+    /** Carga en runtime la memoria de rostros guardada en disco (spec §6). */
+    private fun loadFaceMemory() {
+        val people = personStore.load()
+        faceMemory.setAll(
+            people.map { p ->
+                FaceMemory.Entry(p.id, p.name, p.signature, personStore.loadPhoto(p.photoPath))
+            },
+        )
+    }
+
+    /** Abre el escaneo inicial, sembrando a las personas ya conocidas. */
+    fun startScan() {
+        synchronized(scanLock) {
+            scanEntries.clear()
+            scanNextLocalId = 0
+            personStore.load().forEach { p ->
+                val photo = personStore.loadPhoto(p.photoPath) ?: return@forEach
+                scanEntries.add(
+                    ScanEntry(scanNextLocalId++, p.id, p.name, p.signature, photo, photo.asImageBitmap(), -1),
+                )
+            }
+        }
+        latestScanFaces = emptyList()
+        _uiState.update { it.copy(isScanning = true, scanLiveFaces = emptyList()) }
+        publishScan()
+    }
+
+    /**
+     * Llega desde ML Kit en modo escaneo. NO enrola a nadie por su cuenta: solo
+     * refresca las caras visibles en vivo para dibujar sus marcos sobre el
+     * preview. El usuario decide a quien agregar tocando su rostro (spec §6).
+     */
+    fun onScanFaces(faces: List<DetectedFace>) {
+        if (!_uiState.value.isScanning) return
+        latestScanFaces = faces
+        _uiState.update { it.copy(scanLiveFaces = faces) }
+    }
+
+    /** Enrola a la persona cuyo rostro (trackId) toco el usuario sobre el preview. */
+    fun captureScanFace(trackId: Int) {
+        if (trackId < 0) return
+        var changed = false
+        synchronized(scanLock) {
+            val alreadyIn = scanEntries.any { it.trackId == trackId }
+            if (!alreadyIn && scanEntries.size < MAX_SCAN_PEOPLE) {
+                val face = latestScanFaces.firstOrNull { it.trackId == trackId }
+                val sig = face?.signature
+                val bmp = face?.thumbnail
+                if (sig != null && bmp != null) {
+                    scanEntries.add(
+                        ScanEntry(scanNextLocalId++, -1, null, sig, bmp, bmp.asImageBitmap(), trackId),
+                    )
+                    changed = true
+                }
+            }
+        }
+        if (changed) publishScan()
+    }
+
+    /** Quita a una persona del escaneo (capturada por error o que sobra). */
+    fun removeScanPerson(localId: Int) {
+        var changed = false
+        synchronized(scanLock) {
+            changed = scanEntries.removeAll { it.localId == localId }
+        }
+        if (changed) publishScan()
+    }
+
+    /** Pone (o quita) el nombre a una persona del escaneo. */
+    fun nameScanPerson(localId: Int, name: String) {
+        synchronized(scanLock) {
+            scanEntries.firstOrNull { it.localId == localId }?.name = name.trim().ifBlank { null }
+        }
+        publishScan()
+    }
+
+    /** Cierra el escaneo: persiste rostro+nombre+foto y arranca la conversacion. */
+    fun finishScan() {
+        synchronized(scanLock) {
+            var nextId = (scanEntries.maxOfOrNull { it.personId } ?: -1) + 1
+            val people = scanEntries.map { e ->
+                val id = if (e.personId >= 0) e.personId else nextId++
+                val path = personStore.savePhoto(id, e.bitmap)
+                PersonStore.Person(id, e.name, e.signature, path)
+            }
+            personStore.save(people)
+            scanEntries.clear()
+        }
+        latestScanFaces = emptyList()
+        loadFaceMemory()
+        _uiState.update {
+            it.copy(isScanning = false, needsScan = false, scanPeople = emptyList(), scanLiveFaces = emptyList())
+        }
+    }
+
+    /** Omite el escaneo (conserva la memoria previa de disco). */
+    fun skipScan() {
+        synchronized(scanLock) { scanEntries.clear() }
+        latestScanFaces = emptyList()
+        _uiState.update {
+            it.copy(isScanning = false, needsScan = false, scanPeople = emptyList(), scanLiveFaces = emptyList())
+        }
+    }
+
+    private fun publishScan() {
+        val list = synchronized(scanLock) {
+            scanEntries.map { ScanPerson(it.localId, it.name, it.image, it.trackId) }
+        }
+        _uiState.update { it.copy(scanPeople = list) }
+    }
+
+    /** Identidad (nombre + foto) por indice de hablante, para el avatar del chat. */
+    private fun buildIdentities(): Map<Int, SpeakerIdentity> {
+        val map = HashMap<Int, SpeakerIdentity>()
+        for (sp in speakers.knownSpeakers) {
+            val name = speakers.nameOf(sp)
+            val photo = speakerPhotos[sp.index]
+            if (!name.isNullOrBlank() || photo != null) {
+                map[sp.index] = SpeakerIdentity(name, photo)
+            }
+        }
+        return map
     }
 
     private fun addUtterance(text: String, tone: Tone, embedding: FloatArray? = null) {
@@ -415,6 +640,13 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         // embedding neuronal (sherpa-onnx) manda; si no, cae a la heuristica.
         val speaker = speakers.classify(prosody.lastVoiceProfile(), embedding, faceHint)
         if (activeFace != null) faceVoiceBinder.reinforce(activeFace.trackId, speaker)
+        // Memoria de rostros (spec §6): si la cara activa coincide con una persona
+        // enrolada en el escaneo, su nombre y foto pasan a este hablante para
+        // mostrar un avatar real en el chat en vez de un circulo de color.
+        faceMemory.match(activeFace?.signature)?.let { person ->
+            if (!person.name.isNullOrBlank()) speakers.rename(speaker, person.name)
+            person.photo?.let { speakerPhotos[speaker.index] = it.asImageBitmap() }
+        }
         val utterance =
             Utterance(id = nextId++, text = clean, tone = tone, speaker = speaker, origin = Origin.HEARD)
         _uiState.update { state ->
@@ -431,6 +663,7 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
                 partialSpeaker = speakers.currentSpeaker,
                 knownSpeakers = speakers.knownSpeakers,
                 anchoredCaption = anchored,
+                speakerIdentities = buildIdentities(),
             )
         }
         scheduleSave()

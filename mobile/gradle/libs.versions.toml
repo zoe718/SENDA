@@ -20,6 +20,7 @@ vosk = "0.3.47"
 # Voxi - Capa 3 Modo B (camara + caras)
 camerax = "1.4.0"
 mlkitFaceMesh = "16.0.0-beta3"
+mlkitFaceDetection = "16.1.7"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -50,6 +51,7 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 mlkit-face-mesh = { group = "com.google.mlkit", name = "face-mesh-detection", version.ref = "mlkitFaceMesh" }
+mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFaceDetection" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

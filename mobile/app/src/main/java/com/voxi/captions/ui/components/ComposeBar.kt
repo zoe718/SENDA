@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -103,6 +104,12 @@ fun ComposeBar(
             modifier = Modifier
                 .scale(scale)
                 .size(52.dp)
+                .shadow(
+                    elevation = if (hasText) 16.dp else 0.dp,
+                    shape = CircleShape,
+                    ambientColor = VoxiTeal,
+                    spotColor = VoxiTeal,
+                )
                 .background(
                     if (hasText) VoxiBrandGradient else SolidColor(VoxiSurfaceHigh),
                     CircleShape,

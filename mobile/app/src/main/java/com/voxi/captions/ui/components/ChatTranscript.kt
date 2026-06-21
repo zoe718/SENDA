@@ -13,6 +13,7 @@ import com.voxi.captions.model.Origin
 import com.voxi.captions.model.Utterance
 import com.voxi.captions.ui.theme.VoxiTeal
 import com.voxi.captions.ui.theme.speakerColor
+import com.voxi.captions.viewmodel.SpeakerIdentity
 
 /**
  * Lógica de chat compartida por la conversación en vivo y el historial:
@@ -57,17 +58,29 @@ fun ChatRow(
     }
 }
 
-/** Una burbuja del chat, con lado, color y agrupación ya resueltos. */
+/**
+ * Una burbuja del chat, con lado, color y agrupación ya resueltos.
+ *
+ * [identity] (spec §6, memoria cara↔voz): si este hablante fue enrolado en el
+ * escaneo, trae su nombre real y su foto, que sustituyen a "Hablante N" y al
+ * círculo de color por un avatar de verdad.
+ */
 @Composable
 fun ChatBubble(
     utterance: Utterance,
     previous: Utterance?,
     modifier: Modifier = Modifier,
     isPartial: Boolean = false,
+    identity: SpeakerIdentity? = null,
 ) {
     val isSelf = utterance.origin == Origin.SELF
     val showSpeaker = startsNewGroup(previous, utterance)
-    val label = if (isSelf) "Tú" else utterance.speaker.displayName
+    val realName = identity?.name?.takeIf { it.isNotBlank() }
+    val label = when {
+        isSelf -> "Tú"
+        realName != null -> realName
+        else -> utterance.speaker.displayName
+    }
     val color = if (isSelf) VoxiTeal else speakerColor(utterance.speaker)
     ChatRow(alignEnd = isSelf, modifier = modifier) {
         SpeechBubble(
@@ -76,6 +89,7 @@ fun ChatBubble(
             isPartial = isPartial,
             speakerName = label,
             speakerColor = color,
+            speakerPhoto = if (isSelf) null else identity?.photo,
             alignEnd = isSelf,
             showSpeaker = showSpeaker,
         )

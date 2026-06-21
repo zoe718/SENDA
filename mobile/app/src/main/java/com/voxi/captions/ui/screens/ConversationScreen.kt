@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.voxi.captions.model.Origin
@@ -49,8 +51,13 @@ import com.voxi.captions.model.Utterance
 import com.voxi.captions.ui.components.ChatBubble
 import com.voxi.captions.ui.components.ComposeBar
 import com.voxi.captions.ui.components.SmartReplyChips
+import com.voxi.captions.ui.components.VoxiBadge
 import com.voxi.captions.ui.components.VoxiWordmark
+import com.voxi.captions.ui.theme.VoxiAmber
+import com.voxi.captions.ui.theme.VoxiAmbientGlow
 import com.voxi.captions.ui.theme.VoxiBackground
+import com.voxi.captions.ui.theme.VoxiBorder
+import com.voxi.captions.ui.theme.VoxiMint
 import com.voxi.captions.ui.theme.VoxiSlate
 import com.voxi.captions.ui.theme.VoxiSurfaceHigh
 import com.voxi.captions.ui.theme.VoxiTeal
@@ -68,74 +75,93 @@ fun ConversationScreen(
     onHistory: () -> Unit = {},
     onNewConversation: () -> Unit = {},
     onChangeVoice: () -> Unit = {},
+    onToggleMute: () -> Unit = {},
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(VoxiBackground)
-            // safeDrawing incluye barras del sistema + IME: la barra de escritura
-            // se eleva con el teclado y nada se rompe (fix responsive).
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(VoxiBackground),
     ) {
-        Header(isListening = state.isListening)
-
-        Spacer(Modifier.size(12.dp))
-
-        ActionsRow(
-            canExport = state.utterances.isNotEmpty(),
-            onNewConversation = onNewConversation,
-            onHistory = onHistory,
-            onExport = onExport,
-            onToggleCamera = onToggleCamera,
-            onChangeVoice = onChangeVoice,
+        // Halo neon ambiental detras del encabezado para dar profundidad premium.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+                .background(VoxiAmbientGlow),
         )
 
-        Spacer(Modifier.size(12.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // safeDrawing incluye barras del sistema + IME: la barra de escritura
+                // se eleva con el teclado y nada se rompe (fix responsive).
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Header(isListening = state.isListening, isMuted = state.isMuted)
 
-        SpeakerSelector(
-            manualSpeaker = state.manualSpeaker,
-            speakers = state.knownSpeakers,
-            onSelect = onSelectSpeaker,
-        )
+            Spacer(Modifier.size(14.dp))
 
-        Spacer(Modifier.size(12.dp))
-
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                state.isModelLoading -> LoadingState()
-                state.utterances.isEmpty() && state.partialText.isEmpty() ->
-                    EmptyState(state.statusMessage)
-                else -> Conversation(state)
-            }
-        }
-
-        state.statusMessage?.let { message ->
-            Text(
-                text = message,
-                style = MaterialTheme.typography.labelMedium,
-                color = VoxiSlate,
-                modifier = Modifier.padding(top = 8.dp),
+            ActionsRow(
+                canExport = state.utterances.isNotEmpty(),
+                isMuted = state.isMuted,
+                onNewConversation = onNewConversation,
+                onHistory = onHistory,
+                onExport = onExport,
+                onToggleCamera = onToggleCamera,
+                onChangeVoice = onChangeVoice,
+                onToggleMute = onToggleMute,
             )
-        }
 
-        if (state.suggestedReplies.isNotEmpty()) {
+            Spacer(Modifier.size(12.dp))
+
+            SpeakerSelector(
+                manualSpeaker = state.manualSpeaker,
+                speakers = state.knownSpeakers,
+                onSelect = onSelectSpeaker,
+            )
+
+            Spacer(Modifier.size(12.dp))
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    state.isModelLoading -> LoadingState()
+                    state.utterances.isEmpty() && state.partialText.isEmpty() ->
+                        EmptyState(state.statusMessage)
+                    else -> Conversation(state)
+                }
+            }
+
+            state.statusMessage?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = VoxiSlate,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            if (state.suggestedReplies.isNotEmpty()) {
+                Spacer(Modifier.size(10.dp))
+                SmartReplyChips(replies = state.suggestedReplies, onPick = onSend)
+            }
+
             Spacer(Modifier.size(10.dp))
-            SmartReplyChips(replies = state.suggestedReplies, onPick = onSend)
+
+            ComposeBar(onSend = onSend)
         }
-
-        Spacer(Modifier.size(10.dp))
-
-        ComposeBar(onSend = onSend)
     }
 }
 
 @Composable
-private fun Header(isListening: Boolean) {
+private fun Header(isListening: Boolean, isMuted: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        VoxiWordmark(subtitle = "Subtitulos vivos")
+        VoxiWordmark(subtitle = "Subtitulos vivos", badgeSize = 34.dp)
         Spacer(Modifier.weight(1f))
-        if (isListening) ListeningIndicator()
+        when {
+            isMuted -> MutedIndicator()
+            isListening -> ListeningIndicator()
+        }
     }
 }
 
@@ -143,11 +169,13 @@ private fun Header(isListening: Boolean) {
 @Composable
 private fun ActionsRow(
     canExport: Boolean,
+    isMuted: Boolean,
     onNewConversation: () -> Unit,
     onHistory: () -> Unit,
     onExport: () -> Unit,
     onToggleCamera: () -> Unit,
     onChangeVoice: () -> Unit,
+    onToggleMute: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -155,7 +183,13 @@ private fun ActionsRow(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        PillButton(label = "Nueva", onClick = onNewConversation)
+        PillButton(label = "Nueva", onClick = onNewConversation, primary = true)
+        // Capa 4: silenciar/reanudar el microfono. Resalta su estado activo.
+        PillButton(
+            label = if (isMuted) "Reanudar" else "Silenciar",
+            onClick = onToggleMute,
+            active = isMuted,
+        )
         PillButton(label = "Camara", onClick = onToggleCamera)
         PillButton(label = "Voz", onClick = onChangeVoice)
         PillButton(label = "Historial", onClick = onHistory)
@@ -163,21 +197,61 @@ private fun ActionsRow(
     }
 }
 
-/** Boton tipo pildora con borde teal, para acciones del header. */
+/** Boton tipo pildora glassy, para acciones del header. */
 @Composable
-private fun PillButton(label: String, onClick: () -> Unit) {
+private fun PillButton(
+    label: String,
+    onClick: () -> Unit,
+    primary: Boolean = false,
+    active: Boolean = false,
+) {
     val shape = RoundedCornerShape(50)
+    val accent = when {
+        active -> VoxiAmber
+        primary -> VoxiTeal
+        else -> VoxiSlate
+    }
+    val content = when {
+        active -> VoxiAmber
+        primary -> VoxiTeal
+        else -> VoxiMint
+    }
     Text(
         text = label,
         style = MaterialTheme.typography.labelLarge,
-        color = VoxiTeal,
+        color = content,
         modifier = Modifier
             .clip(shape)
-            .background(VoxiSurfaceHigh)
-            .border(1.dp, VoxiTeal.copy(alpha = 0.55f), shape)
+            .background(if (active) VoxiAmber.copy(alpha = 0.16f) else VoxiSurfaceHigh)
+            .border(1.dp, accent.copy(alpha = if (primary || active) 0.55f else 0.22f), shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     )
+}
+
+/** Indicador de microfono silenciado (Capa 4), en ambar para diferenciarlo. */
+@Composable
+private fun MutedIndicator() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(VoxiSurfaceHigh)
+            .border(1.dp, VoxiAmber.copy(alpha = 0.4f), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(9.dp)
+                .background(VoxiAmber, CircleShape),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "Silenciado",
+            style = MaterialTheme.typography.labelMedium,
+            color = VoxiAmber,
+        )
+    }
 }
 
 /**
@@ -201,6 +275,10 @@ private fun SpeakerSelector(
             selected = manualSpeaker == null,
             onClick = { onSelect(null) },
             label = { Text("Auto") },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = VoxiTeal.copy(alpha = 0.22f),
+                selectedLabelColor = VoxiTeal,
+            ),
         )
         speakers.forEach { speaker ->
             val color = speakerColor(speaker)
@@ -229,10 +307,17 @@ private fun ListeningIndicator() {
         ),
         label = "pulse",
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(VoxiSurfaceHigh)
+            .border(1.dp, VoxiTeal.copy(alpha = 0.3f), RoundedCornerShape(50))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
         Box(
             modifier = Modifier
-                .size(10.dp)
+                .size(9.dp)
                 .alpha(pulse)
                 .background(VoxiTeal, CircleShape),
         )
@@ -240,7 +325,7 @@ private fun ListeningIndicator() {
         Text(
             text = "Escuchando",
             style = MaterialTheme.typography.labelMedium,
-            color = VoxiSlate,
+            color = VoxiMint,
         )
     }
 }
@@ -264,6 +349,7 @@ private fun Conversation(state: ConversationUiState) {
             ChatBubble(
                 utterance = utterance,
                 previous = state.utterances.getOrNull(index - 1),
+                identity = state.speakerIdentities[utterance.speaker.index],
                 modifier = Modifier.animateItem(),
             )
         }
@@ -280,6 +366,7 @@ private fun Conversation(state: ConversationUiState) {
                     utterance = partial,
                     previous = state.utterances.lastOrNull(),
                     isPartial = true,
+                    identity = state.speakerIdentities[state.partialSpeaker.index],
                     modifier = Modifier.animateItem(),
                 )
             }
@@ -309,15 +396,26 @@ private fun EmptyState(statusMessage: String?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = 0.9f },
+            .graphicsLayer { alpha = 0.95f },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        VoxiBadge(size = 64.dp)
+        Spacer(Modifier.size(20.dp))
         Text(
-            text = statusMessage ?: "Habla y verás los subtítulos aquí.",
-            style = MaterialTheme.typography.bodyLarge,
+            text = "Todo listo para escuchar",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = VoxiMint,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text = statusMessage ?: "Habla y veras los subtitulos aparecer aqui.",
+            style = MaterialTheme.typography.bodyMedium,
             color = VoxiSlate,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp),
         )
     }
 }

@@ -67,7 +67,7 @@ import com.voxi.captions.ui.theme.VoxiSurface
 import com.voxi.captions.ui.theme.VoxiTeal
 import com.voxi.captions.ui.theme.speakerColor
 import com.voxi.captions.vision.DetectedFace
-import com.voxi.captions.vision.FaceMeshAnalyzer
+import com.voxi.captions.vision.FaceAnalyzer
 import com.voxi.captions.viewmodel.ConversationUiState
 import java.util.concurrent.Executors
 
@@ -121,7 +121,7 @@ fun CameraScreen(
                     .setResolutionSelector(resolution)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { it.setAnalyzer(analysisExecutor, FaceMeshAnalyzer(onFacesDetected)) }
+                    .also { it.setAnalyzer(analysisExecutor, FaceAnalyzer(onFacesDetected)) }
 
                 provider.unbindAll()
                 provider.bindToLifecycle(
@@ -203,10 +203,11 @@ private fun CaptionOverlay(
         )
 
         // Modo C (spec §6): hay voz en curso pero NINGUNA cara visible esta
-        // hablando -> alguien fuera de cuadro. Se evalua ANTES que el texto
-        // anclado viejo; si no, tras la primera frase el aviso no volveria a
-        // salir (este era el bug: el parcial se pegaba al ancla anterior).
-        if (partial.isNotBlank() && active == null) {
+        // hablando de forma SOSTENIDA -> alguien fuera de cuadro. Usamos el flag
+        // con debounce del ViewModel (state.speakerOffscreen) en vez de un unico
+        // frame con active==null, para que el aviso no parpadee ni tape al
+        // hablante real cuando solo hace una pausa entre silabas.
+        if (partial.isNotBlank() && state.speakerOffscreen) {
             val dir = state.soundDirection
             val align = when {
                 dir == null -> Alignment.TopCenter

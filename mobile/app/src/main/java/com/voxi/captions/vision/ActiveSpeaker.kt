@@ -19,8 +19,9 @@ class ActiveSpeaker {
 
     companion object {
         // Movimiento labial minimo (media de |delta| de apertura) para considerar
-        // que la cara realmente esta hablando.
-        private const val MIN_MOTION = 0.012f
+        // que la cara realmente esta hablando. Bajo a proposito: basta una vibracion
+        // pequena de labios para enganchar al hablante; el HOLD largo lo sostiene.
+        private const val MIN_MOTION = 0.008f
         // Apertura minima como respaldo cuando una cara aun no tiene trackId/historial.
         private const val MIN_MOUTH_OPEN = 0.04f
         // Peso de la apertura absoluta dentro del puntaje (secundario al movimiento).
@@ -28,7 +29,9 @@ class ActiveSpeaker {
         // Margen extra que un candidato distinto debe superar para destronar al actual.
         private const val SWITCH_MARGIN = 0.010f
         // Frames que se mantiene al hablante tras dejar de detectar movimiento.
-        private const val HOLD_FRAMES = 8
+        // Alto a proposito (~1.5 s a 15 fps) para que el aura NO parpadee durante
+        // las pausas naturales del habla y se sienta estable sobre quien habla.
+        private const val HOLD_FRAMES = 22
         // Tamano de la ventana de historial por cara.
         private const val WINDOW = 6
         // Frames sin ver un trackId tras los que se descarta su historial.

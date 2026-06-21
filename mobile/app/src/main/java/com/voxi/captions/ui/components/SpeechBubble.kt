@@ -24,17 +24,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.voxi.captions.model.Tone
 import com.voxi.captions.ui.theme.BUBBLE_BASE_SP
+import com.voxi.captions.ui.theme.VoxiCardGradient
 import com.voxi.captions.ui.theme.VoxiSlate
-import com.voxi.captions.ui.theme.VoxiSurface
-import com.voxi.captions.ui.theme.VoxiSurfaceHigh
 import com.voxi.captions.ui.theme.VoxiTeal
 import com.voxi.captions.ui.theme.VoxiViolet
 import com.voxi.captions.ui.theme.toneStyle
@@ -52,6 +51,7 @@ fun SpeechBubble(
     isPartial: Boolean = false,
     speakerName: String? = null,
     speakerColor: Color = VoxiTeal,
+    speakerPhoto: ImageBitmap? = null,
     alignEnd: Boolean = false,
     showSpeaker: Boolean = true,
 ) {
@@ -99,9 +99,10 @@ fun SpeechBubble(
                 label = speakerName ?: "?",
                 color = speakerColor,
                 dimmed = isPartial,
+                photo = speakerPhoto,
             )
         } else {
-            Spacer(Modifier.size(34.dp))
+            Spacer(Modifier.size(40.dp))
         }
     }
 
@@ -115,19 +116,20 @@ fun SpeechBubble(
         }
 
         var bubbleModifier = Modifier.offset { IntOffset(shakeDx.roundToInt(), 0) }
-        if (style.glow && !isPartial) {
-            bubbleModifier = bubbleModifier.shadow(
-                elevation = 18.dp,
+        // Sombra de color: glow violeta fuerte si el tono lo pide (grito/enfasis),
+        // si no una sombra suave del color del hablante para dar profundidad.
+        bubbleModifier = if (style.glow && !isPartial) {
+            bubbleModifier.shadow(elevation = 22.dp, shape = shape, ambientColor = VoxiViolet, spotColor = VoxiViolet)
+        } else {
+            bubbleModifier.shadow(
+                elevation = if (isPartial) 0.dp else 10.dp,
                 shape = shape,
-                ambientColor = VoxiViolet,
-                spotColor = VoxiViolet,
+                ambientColor = speakerColor,
+                spotColor = speakerColor,
             )
         }
         bubbleModifier = bubbleModifier
-            .background(
-                Brush.verticalGradient(listOf(VoxiSurfaceHigh, VoxiSurface)),
-                shape,
-            )
+            .background(VoxiCardGradient, shape)
             .border(1.dp, speakerColor.copy(alpha = borderAlpha), shape)
             .padding(horizontal = 16.dp, vertical = 11.dp)
 

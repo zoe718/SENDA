@@ -1,5 +1,6 @@
 package com.voxi.captions.vision
 
+import android.graphics.Bitmap
 import com.voxi.captions.model.Speaker
 
 /**
@@ -32,6 +33,9 @@ data class DetectedFace(
     // Aspecto (ancho/alto) de la imagen vertical de la que salio esta cara, para
     // mapear las coordenadas normalizadas al recorte FILL_CENTER del preview.
     val imageAspect: Float = 0f,
+    // Miniatura recortada del rostro (solo se llena en modo escaneo, spec §6),
+    // para enrolar a la persona con su foto. Transitoria: no entra en equals.
+    val thumbnail: Bitmap? = null,
 ) {
     // equals/hashCode ignoran la firma (FloatArray) para no comparar arreglos por
     // referencia; basta la geometría y los ids para detectar cambios de cuadro.

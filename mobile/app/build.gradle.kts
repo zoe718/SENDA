@@ -91,7 +91,9 @@ dependencies {
     implementation(libs.androidx.camera.camera2)
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
-    implementation(libs.mlkit.face.mesh)
+    // Face Detection: multi-cara + tracking nativo + landmarks (Capa 2 escaneo +
+    // Modo B). Reemplaza a Face Mesh, que solo seguia una cara prominente.
+    implementation(libs.mlkit.face.detection)
 
     // Tests
     testImplementation(libs.junit)

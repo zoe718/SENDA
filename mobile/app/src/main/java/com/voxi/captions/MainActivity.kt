@@ -34,6 +34,7 @@ import com.voxi.captions.ui.components.VoxiBadge
 import com.voxi.captions.ui.screens.CameraScreen
 import com.voxi.captions.ui.screens.ConversationScreen
 import com.voxi.captions.ui.screens.HistoryScreen
+import com.voxi.captions.ui.screens.ScanScreen
 import com.voxi.captions.ui.screens.VoiceSelectionScreen
 import com.voxi.captions.ui.theme.VoxiBackground
 import com.voxi.captions.ui.theme.VoxiBg
@@ -98,6 +99,26 @@ private fun VoxiApp() {
         if (granted) viewModel.setShowCamera(true)
     }
 
+    // Capa 2 (spec 6): permiso de camara dedicado para el escaneo inicial.
+    // Si se concede arrancamos el escaneo; si se niega lo omitimos y seguimos.
+    val scanCameraLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasCameraPermission = granted
+        if (granted) viewModel.startScan() else viewModel.skipScan()
+    }
+
+    // Arranque camara-primero: tras conceder el microfono, si aun no se ha
+    // escaneado en esta sesion, pedimos camara y abrimos la pantalla de escaneo.
+    androidx.compose.runtime.LaunchedEffect(
+        hasMicPermission, state.needsScan, state.isScanning, hasCameraPermission,
+    ) {
+        if (hasMicPermission && state.needsScan && !state.isScanning) {
+            if (hasCameraPermission) viewModel.startScan()
+            else scanCameraLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     val onToggleCamera: () -> Unit = {
         when {
             state.showCamera -> viewModel.setShowCamera(false)
@@ -114,6 +135,17 @@ private fun VoxiApp() {
         )
         !hasMicPermission -> PermissionRequest(
             onRequest = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+        )
+        state.isScanning -> ScanScreen(
+            people = state.scanPeople,
+            liveFaces = state.scanLiveFaces,
+            onScanFaces = viewModel::onScanFaces,
+            onCaptureFace = viewModel::captureScanFace,
+            onRemovePerson = viewModel::removeScanPerson,
+            onName = viewModel::nameScanPerson,
+            onFinish = viewModel::finishScan,
+            onSkip = viewModel::skipScan,
+            modifier = Modifier.fillMaxSize(),
         )
         state.showHistory -> HistoryScreen(
             state = state,
@@ -140,6 +172,7 @@ private fun VoxiApp() {
             onHistory = viewModel::openHistory,
             onNewConversation = viewModel::startNewConversation,
             onChangeVoice = viewModel::requestVoiceChange,
+            onToggleMute = viewModel::toggleMute,
         )
     }
 }
