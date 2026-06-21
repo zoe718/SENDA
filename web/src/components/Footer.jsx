@@ -9,12 +9,12 @@ export default function Footer() {
           {/* Marca + tagline */}
           <div className="max-w-sm">
             <div className="flex items-center gap-3">
-              <span
-                className="brand-gradient grid h-9 w-9 place-items-center rounded-lg"
+              <img
+                src="/resources/senda-logo.png"
+                alt=""
+                className="h-10 w-10 rounded-lg border border-white/10 object-cover"
                 aria-hidden="true"
-              >
-                <span className="h-2.5 w-2.5 rounded-full bg-snow" />
-              </span>
+              />
               <span className="font-title text-2xl font-extrabold tracking-tight text-snow">
                 SENDA
               </span>
