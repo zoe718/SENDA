@@ -37,8 +37,17 @@ export default function Hero() {
         className="absolute inset-0"
         aria-hidden="true"
         style={{
+          background: "rgba(0,0,0,.76)",
+        }}
+      />
+
+      <div
+        className="pointer-events-none absolute left-[-7rem] top-[18%] h-[34rem] w-[22rem] rounded-full opacity-35 blur-3xl sm:left-[-2rem] md:left-[4%]"
+        aria-hidden="true"
+        style={{
           background:
-            "linear-gradient(180deg, rgba(11,23,54,.55) 0%, rgba(11,23,54,.30) 35%, rgba(11,23,54,.70) 100%)",
+            "linear-gradient(135deg, rgba(107,127,232,.55) 0%, rgba(168,154,232,.42) 100%)",
+          mixBlendMode: "screen",
         }}
       />
 
@@ -46,16 +55,19 @@ export default function Hero() {
       <div className="relative z-10 flex flex-col items-center gap-10 px-6">
         <h1
           id="hero-title"
-          className="animate-hero-in max-w-[16ch] font-title text-5xl font-extrabold leading-[1.05] text-white sm:text-6xl md:text-7xl"
+          className="animate-hero-in max-w-[16ch] font-title text-5xl font-extrabold leading-[1.05] text-snow sm:text-6xl md:text-7xl"
           style={{ textShadow: "0 4px 30px rgba(0,0,0,.45)" }}
         >
-          Haz <span className="brand-gradient-text">visible</span> la conversación
+          Haz <span className="highlight-gradient-text">visible</span> la conversación
         </h1>
 
         {/* CTA debajo del texto, con indicación hacia abajo */}
         <a
           href="#about"
-          className="brand-gradient animate-cue group inline-flex items-center gap-2 rounded-full px-7 py-3.5 font-title text-base font-semibold text-[#06231b] shadow-[0_12px_34px_rgba(66,232,180,.45)] transition-transform duration-300 hover:-translate-y-0.5"
+          className="animate-cue group inline-flex items-center gap-2 rounded-full px-7 py-3.5 font-title text-base font-semibold text-night shadow-[0_12px_34px_rgba(107,127,232,.28)] transition-transform duration-300 hover:-translate-y-0.5"
+          style={{
+            background: "linear-gradient(135deg, #6b7fe8 0%, #a89ae8 100%)",
+          }}
         >
           Comunícate
           <svg

@@ -37,17 +37,17 @@ const STEPS = [
 
 export default function HowItWorks() {
   return (
-    <section id="como-funciona" className="bg-mint py-24" aria-labelledby="como-title">
+    <section id="como-funciona" className="bg-night py-24" aria-labelledby="como-title">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto mb-14 max-w-2xl text-center">
-          <span className="font-title text-xs font-bold uppercase tracking-[0.16em] text-[#0a9c74]">
+          <span className="font-title text-xs font-bold uppercase tracking-[0.16em] text-aura">
             Cómo funciona
           </span>
           <h2
             id="como-title"
-            className="mt-4 font-title text-3xl font-bold text-navy sm:text-4xl"
+            className="mt-4 font-title text-3xl font-bold text-snow sm:text-4xl"
           >
-            Tres pasos para hacerla visible.
+            Tres pasos para hacerla <span className="text-aura">visible</span>.
           </h2>
         </div>
 
@@ -57,15 +57,15 @@ export default function HowItWorks() {
               as="li"
               key={s.n}
               style={{ transitionDelay: `${i * 80}ms` }}
-              className="relative rounded-[28px] border border-navy/8 bg-white p-9 pt-10 text-center shadow-sm transition-transform duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-navy/5"
+              className="relative rounded-lg border border-line bg-panel p-9 pt-10 text-center shadow-sm shadow-black/20 transition-transform duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:shadow-black/30"
             >
-              <span className="brand-gradient absolute -top-5 left-1/2 grid h-10 w-10 -translate-x-1/2 place-items-center rounded-full font-title font-extrabold text-[#06231b] shadow-lg shadow-aura/40">
+              <span className="absolute -top-5 left-1/2 grid h-10 w-10 -translate-x-1/2 place-items-center rounded-full bg-voice font-title font-extrabold text-night shadow-lg shadow-voice/20">
                 {s.n}
               </span>
-              <div className="mx-auto mb-5 mt-3 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-aura/20 to-voice/20 text-[#0a9c74]">
+              <div className="mx-auto mb-5 mt-3 grid h-16 w-16 place-items-center rounded-lg bg-panel-soft text-aura">
                 {s.icon}
               </div>
-              <h3 className="font-title text-xl font-bold text-navy">{s.title}</h3>
+              <h3 className="font-title text-xl font-bold text-snow">{s.title}</h3>
               <p className="mt-2 text-slate-soft">{s.desc}</p>
             </Reveal>
           ))}

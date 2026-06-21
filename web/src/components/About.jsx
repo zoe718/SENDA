@@ -65,19 +65,19 @@ const FEATURES = [
 
 export default function About() {
   return (
-    <section id="about" className="bg-snow py-24" aria-labelledby="about-title">
+    <section id="about" className="bg-night py-24" aria-labelledby="about-title">
       <div className="mx-auto max-w-6xl px-6">
         {/* Intro */}
         <Reveal className="mx-auto max-w-3xl text-center">
-          <span className="font-title text-xs font-bold uppercase tracking-[0.16em] text-[#0a9c74]">
+          <span className="font-title text-xs font-bold uppercase tracking-[0.16em] text-aura">
             Qué es SENDA
           </span>
           <h2
             id="about-title"
-            className="mt-4 font-title text-3xl font-bold leading-tight text-navy sm:text-4xl"
+            className="mt-4 font-title text-3xl font-bold leading-tight text-snow sm:text-4xl"
           >
             No solo subtitulamos palabras.{" "}
-            <span className="brand-gradient-text">Mostramos quién habla y dónde está.</span>
+            <span className="text-aura">Mostramos quién habla y dónde está.</span>
           </h2>
           <p className="mt-5 text-lg text-slate-soft">
             En una conversación grupal, perder el origen de una voz es perder el hilo. SENDA
@@ -95,16 +95,16 @@ export default function About() {
               as="article"
               key={f.title}
               style={{ transitionDelay: `${i * 60}ms` }}
-              className={`group rounded-3xl border p-7 transition-transform duration-300 hover:-translate-y-1.5 ${
+              className={`group rounded-lg border p-7 transition-transform duration-300 hover:-translate-y-1.5 ${
                 f.accent
-                  ? "border-aura/40 bg-gradient-to-br from-aura/15 to-voice/15 shadow-lg shadow-aura/10"
-                  : "border-navy/8 bg-white shadow-sm"
+                  ? "border-voice bg-panel shadow-lg shadow-voice/10"
+                  : "border-line bg-panel shadow-sm shadow-black/20"
               }`}
             >
-              <div className="mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-aura/20 to-voice/20 text-[#0a9c74]">
+              <div className="mb-5 grid h-14 w-14 place-items-center rounded-lg bg-panel-soft text-aura">
                 {f.icon}
               </div>
-              <h3 className="font-title text-xl font-bold text-navy">{f.title}</h3>
+              <h3 className="font-title text-xl font-bold text-snow">{f.title}</h3>
               <p className="mt-2 text-slate-soft">{f.desc}</p>
             </Reveal>
           ))}

@@ -2,15 +2,19 @@
 
 /* =========================================================
    SENDA — design tokens (Tailwind v4 @theme)
-   Genera utilidades: bg-navy, text-aura, font-title, etc.
+   Genera utilidades: bg-night, text-aura, font-title, etc.
    ========================================================= */
 @theme {
-  --color-aura: #42e8b4; /* verde aura */
-  --color-voice: #57b7ff; /* azul voz */
-  --color-navy: #0b1736; /* azul profundo */
-  --color-snow: #f8fcff; /* blanco nieve */
-  --color-mint: #effffa; /* menta suave */
-  --color-slate-soft: #64748b; /* gris texto */
+  --color-night: #000000; /* fondo principal */
+  --color-panel: #141414; /* cards */
+  --color-panel-soft: #1f1f1f; /* icon wells */
+  --color-line: #262626; /* bordes */
+  --color-aura: #a89ae8; /* acento violeta */
+  --color-voice: #6b7fe8; /* acento azul */
+  --color-brand-start: #6b7fe8; /* logo y CTA */
+  --color-brand-end: #a89ae8; /* logo y CTA */
+  --color-snow: #ffffff; /* texto principal */
+  --color-slate-soft: #9ca3af; /* gris texto */
   --color-coral: #ff6b6b; /* coral alerta */
 
   --font-title: "Sora", system-ui, sans-serif;
@@ -25,18 +29,18 @@ html {
 body {
   margin: 0;
   font-family: var(--font-body);
-  color: var(--color-navy);
-  background: var(--color-snow);
+  color: var(--color-snow);
+  background: var(--color-night);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 /* Gradiente de marca reutilizable */
 .brand-gradient {
-  background: linear-gradient(135deg, #42e8b4 0%, #57b7ff 100%);
+  background: linear-gradient(135deg, #6b7fe8 0%, #a89ae8 100%);
 }
-.brand-gradient-text {
-  background: linear-gradient(135deg, #42e8b4 0%, #57b7ff 100%);
+.highlight-gradient-text {
+  background: linear-gradient(135deg, #6b7fe8 0%, #a89ae8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -44,7 +48,7 @@ body {
 
 /* Foco accesible */
 :focus-visible {
-  outline: 3px solid var(--color-voice);
+  outline: 3px solid var(--color-aura);
   outline-offset: 3px;
   border-radius: 8px;
 }

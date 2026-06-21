@@ -10,13 +10,13 @@ export default function Header() {
       <div className="mx-auto flex h-20 max-w-6xl items-center px-6">
         <a href="#top" aria-label="SENDA — inicio" className="flex items-center gap-3">
           <span
-            className="brand-gradient grid h-10 w-10 place-items-center rounded-xl shadow-lg shadow-aura/40"
+            className="brand-gradient grid h-10 w-10 place-items-center rounded-lg shadow-lg shadow-voice/20"
             aria-hidden="true"
           >
-            <span className="h-3 w-3 rounded-full bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.45)]" />
+            <span className="h-3 w-3 rounded-full bg-snow shadow-[0_0_0_3px_rgba(255,255,255,0.28)]" />
           </span>
           <span
-            className="font-title text-2xl font-extrabold tracking-tight text-white"
+            className="font-title text-2xl font-extrabold tracking-tight text-snow"
             style={{ textShadow: "0 2px 14px rgba(0,0,0,0.35)" }}
           >
             SENDA
