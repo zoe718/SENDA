@@ -19,7 +19,9 @@ import java.net.URL
  */
 object SmartReplyService {
 
-    private const val MODEL = "gemini-flash-latest"
+    // gemini-2.5-flash-lite: rapido y con free tier amplio (gemini-2.0-flash da
+    // limite 0 y gemini-3.5-flash solo 20/dia en el free tier nuevo).
+    private const val MODEL = "gemini-2.5-flash-lite"
     private const val ENDPOINT =
         "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
 

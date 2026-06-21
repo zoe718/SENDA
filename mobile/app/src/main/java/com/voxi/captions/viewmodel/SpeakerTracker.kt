@@ -161,9 +161,37 @@ class SpeakerTracker(private val store: SpeakerStore? = null) {
         if (speaker != null) lastSpeaker = speaker
     }
 
-    /** Clasifica una frase ya fijada a partir de su huella de voz. */
-    fun classify(profile: VoiceProfile, embedding: FloatArray? = null): Speaker {
+    /**
+     * Clasifica una frase ya fijada a partir de su huella de voz.
+     *
+     * [faceHint] es una pista FUERTE de la fusion cara-voz (spec 6): si la cara
+     * que esta hablando ya se asocio antes con una voz conocida, esa intervencion
+     * va a esa misma persona aunque el audio sea ambiguo. Asi no se confunden ni
+     * se duplican hablantes cuando vemos la cara del que habla. La huella de voz
+     * (heuristica/embedding) se sigue aprendiendo dentro de esa misma voz.
+     */
+    fun classify(
+        profile: VoiceProfile,
+        embedding: FloatArray? = null,
+        faceHint: Speaker? = null,
+    ): Speaker {
         manual?.let { return it }
+
+        // Pista cara-voz: si la cara activa ya tiene una voz conocida asociada,
+        // mandamos la intervencion a esa voz y aprendemos su huella ahi mismo.
+        if (faceHint != null) {
+            val c = clusters.firstOrNull { it.index == faceHint.index }
+            if (c != null) {
+                if (embedding != null) updateEmb(c, embedding)
+                if (profile.voiced && profile.frames >= STRONG_FRAMES) {
+                    c.update(profile.medianPitch, profile.pitchSpread, profile.brightness)
+                }
+                c.count++
+                lastSpeaker = Speaker(c.index)
+                persist()
+                return lastSpeaker
+            }
+        }
 
         // Si hay huella neuronal (sherpa-onnx), manda sobre la heuristica.
         if (embedding != null) return classifyByEmbedding(profile, embedding)

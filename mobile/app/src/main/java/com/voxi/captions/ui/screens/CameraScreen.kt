@@ -9,6 +9,7 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.tween
@@ -38,7 +39,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size as GeoSize
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -169,21 +174,10 @@ private fun CaptionOverlay(
     val active = state.activeFace
 
     BoxWithConstraints(modifier = modifier) {
-        // Marcadores tenues sobre las otras caras detectadas: deja claro que
-        // Voxi ve a varias personas aunque solo una hable a la vez.
-        state.faces.forEach { face ->
-            if (face !== active) {
-                val (mx, my) = anchorAboveHead(face.cx, face.cy, face.widthRatio)
-                FaceMarker(
-                    modifier = Modifier.align(
-                        BiasAlignment(
-                            (mx * 2f - 1f).coerceIn(-1f, 1f),
-                            (my * 2f - 1f).coerceIn(-0.96f, 0.96f),
-                        ),
-                    ),
-                )
-            }
-        }
+        // Contorno de color por cara (spec 6/8): cada persona se ilumina con el
+        // color de su hablante; la que esta hablando se resalta mas fuerte. Asi se
+        // distingue quien es quien aunque varias personas esten en cuadro.
+        FaceOutlines(faces = state.faces, active = active, modifier = Modifier.fillMaxSize())
 
         val text: String
         val cx: Float
@@ -282,20 +276,39 @@ private fun FloatingCaption(text: String, accent: Color, speakerName: String) {
     }
 }
 
-/** Marcador discreto sobre una cara detectada que no es la que habla. */
+/**
+ * Dibuja un contorno redondeado alrededor de cada cara con el color de su
+ * hablante (spec 6/8). La cara que esta hablando se resalta con trazo grueso y
+ * opaco; las demas, con trazo fino y tenue. Las caras aun sin voz asociada usan
+ * un gris neutro hasta que la fusion cara-voz aprende a quien pertenecen.
+ */
 @Composable
-private fun FaceMarker(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(VoxiSurface.copy(alpha = 0.7f), CircleShape)
-            .border(1.dp, VoxiSlate.copy(alpha = 0.7f), CircleShape)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-    ) {
-        Text(
-            text = "\u00b7\u00b7\u00b7",
-            style = MaterialTheme.typography.labelMedium,
-            color = VoxiSlate,
-        )
+private fun FaceOutlines(
+    faces: List<DetectedFace>,
+    active: DetectedFace?,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        faces.forEach { face ->
+            val color = face.speaker?.let { speakerColor(it) } ?: VoxiSlate
+            val isActive = active != null && face.trackId >= 0 && active.trackId == face.trackId
+            val boxW = (face.widthRatio * w).coerceAtLeast(8f)
+            val boxH = (face.heightRatio * h).coerceAtLeast(8f)
+            val padX = boxW * 0.12f
+            val padY = boxH * 0.16f
+            drawRoundRect(
+                color = color.copy(alpha = if (isActive) 1f else 0.5f),
+                topLeft = Offset(
+                    face.cx * w - boxW / 2f - padX,
+                    face.cy * h - boxH / 2f - padY,
+                ),
+                size = GeoSize(boxW + padX * 2f, boxH + padY * 2f),
+                cornerRadius = CornerRadius(boxW * 0.4f, boxW * 0.4f),
+                style = Stroke(width = (if (isActive) 5f else 2.5f).dp.toPx()),
+            )
+        }
     }
 }
 

@@ -25,6 +25,8 @@ import com.voxi.captions.tts.AndroidTts
 import com.voxi.captions.tts.ElevenLabsTts
 import com.voxi.captions.vision.ActiveSpeaker
 import com.voxi.captions.vision.DetectedFace
+import com.voxi.captions.vision.FaceTracker
+import com.voxi.captions.vision.FaceVoiceBinder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -82,6 +84,10 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private val embedder = SpeakerEmbedder(app)
     private val speakers = SpeakerTracker(SpeakerStore(app))
     private val activeSpeaker = ActiveSpeaker()
+    // Reconocimiento facial (spec 6): da ids estables a las caras y aprende que
+    // rostro corresponde a que voz, para colorear contornos y guiar la diarizacion.
+    private val faceTracker = FaceTracker()
+    private val faceVoiceBinder = FaceVoiceBinder()
     private val tts by lazy { AndroidTts(getApplication()) }
     // Voz humana de ElevenLabs (spec §7): si hay clave e internet sintetiza una
     // voz expresiva; si no, cae al TTS nativo de Android.
@@ -280,6 +286,9 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
         speakers.softReset()
         prosody.reset()
         resetPcm()
+        // Las asociaciones cara-voz son por sesion: una conversacion nueva las olvida.
+        faceTracker.reset()
+        faceVoiceBinder.reset()
         replyJob?.cancel()
         _uiState.update {
             it.copy(
@@ -347,10 +356,15 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onFacesDetected(faces: List<DetectedFace>) {
         val s = _uiState.value
+        // Asigna ids estables y pinta cada cara con el color de su hablante (si ya
+        // se asocio una voz con ese rostro).
+        val tracked = faceTracker.track(faces).map { f ->
+            f.copy(speaker = faceVoiceBinder.speakerFor(f.trackId))
+        }
         val audioActive = s.isListening &&
             (s.partialText.isNotBlank() || s.partialTone.volume > 0.35f)
-        val active = activeSpeaker.update(faces, audioActive)
-        _uiState.update { it.copy(faces = faces, activeFace = active) }
+        val active = activeSpeaker.update(tracked, audioActive)
+        _uiState.update { it.copy(faces = tracked, activeFace = active) }
     }
 
     /** Modo A (spec §6): el usuario fija un carril, o null para diarización automática. */
@@ -368,9 +382,16 @@ class ConversationViewModel(app: Application) : AndroidViewModel(app) {
     private fun addUtterance(text: String, tone: Tone, embedding: FloatArray? = null) {
         val clean = text.trim()
         if (clean.isEmpty()) return
+        // Fusion cara-voz (spec 6): si la cara que esta hablando ya tiene una voz
+        // asociada, se usa como pista fuerte para no confundir ni duplicar
+        // hablantes; al terminar, se refuerza la asociacion de esa cara con la voz
+        // que resulto clasificada.
+        val activeFace = _uiState.value.activeFace
+        val faceHint = activeFace?.let { faceVoiceBinder.speakerFor(it.trackId) }
         // La diarización usa la huella de voz de esta intervención: si hay
         // embedding neuronal (sherpa-onnx) manda; si no, cae a la heuristica.
-        val speaker = speakers.classify(prosody.lastVoiceProfile(), embedding)
+        val speaker = speakers.classify(prosody.lastVoiceProfile(), embedding, faceHint)
+        if (activeFace != null) faceVoiceBinder.reinforce(activeFace.trackId, speaker)
         val utterance =
             Utterance(id = nextId++, text = clean, tone = tone, speaker = speaker, origin = Origin.HEARD)
         _uiState.update { state ->
